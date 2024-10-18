@@ -1,22 +1,22 @@
 from sys import stderr as err
 
-from .base import Step, is_team_sector, nearby_positions
+from .base import Params, is_team_sector, nearby_positions
 from .space import Space
 from .fleet import Fleet, PathFinder, path_to_actions
 from .tasks import FindRelicNodes, FindRewardNodes
 
 
-def explore(step: Step, space: Space, fleet: Fleet):
-    if step.global_step >= 150:
-        delete_tasks(fleet, (FindRelicNodes, FindRewardNodes))
+def explore(agent):
+    if agent.global_step >= 150:
+        delete_tasks(agent.fleet, (FindRelicNodes, FindRewardNodes))
         return
 
-    find_relics(space, fleet)
-    find_rewards(space, fleet)
+    find_relics(agent.space, agent.fleet)
+    find_rewards(agent.space, agent.fleet)
 
 
 def find_relics(space: Space, fleet: Fleet):
-    if space.all_relics_found:
+    if Params.ALL_RELICS_FOUND:
         delete_tasks(fleet, FindRelicNodes)
         return
 
@@ -58,14 +58,14 @@ def find_relics(space: Space, fleet: Fleet):
         ship.action_queue = path_to_actions(path)
 
         for x, y in path:
-            for _x, _y in nearby_positions(x, y, fleet.unit_sensor_range):
+            for _x, _y in nearby_positions(x, y, Params.UNIT_SENSOR_RANGE):
                 node = space.get_node(_x, _y)
                 if node in nodes_to_explore:
                     nodes_to_explore.remove(node)
 
 
 def find_rewards(space: Space, fleet: Fleet):
-    if space.all_rewards_found:
+    if Params.ALL_REWARDS_FOUND:
         delete_tasks(fleet, FindRewardNodes)
         return
 

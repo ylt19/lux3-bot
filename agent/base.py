@@ -1,25 +1,28 @@
-SPACE_SIZE = 24
-RELIC_REWARD_RANGE = 2
-MAX_ENERGY_PER_TILE = 20
-MIN_ENERGY_PER_TILE = -20
-MAX_STEPS_IN_MATCH = 100
+class Params:
+    # Game related constants
+    MAX_UNITS = 16
+    SPACE_SIZE = 24
+    RELIC_REWARD_RANGE = 2
+    MIN_ENERGY_PER_TILE = -20
+    MAX_ENERGY_PER_TILE = 20
+    MAX_STEPS_IN_MATCH = 100
+    UNIT_MOVE_COST = 1  # OPTIONS: list(range(1, 6))
+    UNIT_SAP_COST = 30  # OPTIONS: list(range(30, 51))
+    UNIT_SAP_RANGE = 3  # OPTIONS: list(range(3, 8))
+    UNIT_SENSOR_RANGE = 2  # OPTIONS: list(range(2, 5))
+
+    NEBULA_ENERGY_REDUCTION_OPTIONS = [0, 10, 100]
+
+    # Agent parameters
+    NEBULA_ENERGY_REDUCTION = 10  # initial value
+
+    # Exploration flags
+    ALL_RELICS_FOUND = False
+    ALL_REWARDS_FOUND = False
+    NEBULA_ENERGY_REDUCTION_FOUND = False
 
 
-class Step:
-    def __init__(self):
-        self.global_step = 0
-        self.match_step = 0
-        self.match = 0
-
-    def update(self):
-        self.global_step += 1
-        self.match_step += 1
-        if self.match_step > MAX_STEPS_IN_MATCH:
-            self.match_step = 0
-            self.match += 1
-
-    def __repr__(self):
-        return f"step {self.global_step}: {self.match}.{self.match_step}"
+SPACE_SIZE = Params.SPACE_SIZE
 
 
 def is_upper_sector(x, y) -> bool:

@@ -4,7 +4,7 @@ from enum import IntEnum
 import numpy as np
 from collections import defaultdict
 
-from .base import SPACE_SIZE, get_opposite, RELIC_REWARD_RANGE
+from .base import Params, SPACE_SIZE, get_opposite
 
 
 class NodeType(IntEnum):
@@ -54,21 +54,23 @@ class Node:
     def explored_for_reward(self):
         return self._explored_for_reward
 
-    def update_relic_status(self, status: None | bool):
-        if status is None:
-            self._relic = False
-            self._explored_for_relic = False
-        else:
-            self._relic = status
-            self._explored_for_relic = True
+    def update_relic_status(self, status: bool):
+        if self._explored_for_relic and self._relic != status:
+            raise ValueError(
+                "Can't change relic status after the tile has already been explored"
+            )
 
-    def update_reward_status(self, status: None | bool):
-        if status is None:
-            self._reward = False
-            self._explored_for_reward = False
-        else:
-            self._reward = status
-            self._explored_for_reward = True
+        self._relic = status
+        self._explored_for_relic = True
+
+    def update_reward_status(self, status: bool):
+        if self._explored_for_reward and self._reward != status:
+            raise ValueError(
+                "Can't change reward status after the tile has already been explored"
+            )
+
+        self._reward = status
+        self._explored_for_reward = True
 
     @property
     def is_unknown(self) -> bool:
@@ -96,8 +98,6 @@ class Space:
         self._relic_id_to_node = {}
         self._relic_nodes: set[Node] = set()
         self._reward_nodes: set[Node] = set()
-        self._all_relics_found = False
-        self._all_rewards_found = False
         self._reward_results = []
 
     def __repr__(self) -> str:
@@ -117,6 +117,15 @@ class Space:
         tile_type = obs["map_features"]["tile_type"]
         energy = obs["map_features"]["energy"]
 
+        relic_nodes = set()
+        for relic_id, (mask, xy) in enumerate(
+            zip(obs["relic_nodes_mask"], obs["relic_nodes"])
+        ):
+            if mask:
+                node = self.get_node(*xy)
+                relic_nodes.add(node)
+                self._relic_id_to_node[relic_id] = node
+
         explored_new_nodes = False
         all_relics_found = True
         all_rewards_found = True
@@ -127,7 +136,8 @@ class Space:
 
             if not node.explored_for_relic:
                 if not node.is_unknown:
-                    self._update_relic_status(x, y, status=False)
+                    status = node in relic_nodes
+                    self._update_relic_status(x, y, status=status)
                     explored_new_nodes = True
                 else:
                     all_relics_found = False
@@ -135,37 +145,29 @@ class Space:
             if not node.explored_for_reward:
                 all_rewards_found = False
 
-        self._all_relics_found = all_relics_found
-        self._all_rewards_found = all_rewards_found
-        self._update_relic_status_from_observation(obs)
+        Params.ALL_RELICS_FOUND = all_relics_found
+        Params.ALL_REWARDS_FOUND = all_rewards_found
 
-        if self.num_relics_found == len(obs["relic_nodes_mask"]):
-            # all relics found, mark all nodes as explored for relics
-            self._all_relics_found = True
-            for node in self:
-                if not node.explored_for_relic:
-                    self._update_relic_status(*node.coordinates, status=False)
-                    explored_new_nodes = True
+        if not Params.ALL_RELICS_FOUND:
+            if self.num_relics_found == len(obs["relic_nodes_mask"]):
+                # all relics found, mark all nodes as explored for relics
+                Params.ALL_RELICS_FOUND = True
+                for node in self:
+                    if not node.explored_for_relic:
+                        self._update_relic_status(*node.coordinates, status=False)
+                        explored_new_nodes = True
 
-        if explored_new_nodes:
-            self._update_reward_status_from_relics_distribution()
+        if not Params.ALL_REWARDS_FOUND:
+            if explored_new_nodes:
+                self._update_reward_status_from_relics_distribution()
 
-        if team_to_reward:
-            self._update_reward_results(obs, team_to_reward)
+            if team_to_reward:
+                self._update_reward_results(obs, team_to_reward)
 
-        self._update_reward_status_from_reward_results()
-
-    def _update_relic_status_from_observation(self, obs):
-        relic_nodes = obs["relic_nodes"]
-        relic_nodes_mask = obs["relic_nodes_mask"]
-        for relic_id, (mask, xy) in enumerate(zip(relic_nodes_mask, relic_nodes)):
-            if mask and relic_id not in self._relic_id_to_node:
-                x, y = int(xy[0]), int(xy[1])
-                self._update_relic_status(x, y, status=True)
-                self._relic_id_to_node[relic_id] = self.get_node(x, y)
+            self._update_reward_status_from_reward_results()
 
     def _update_reward_status_from_relics_distribution(self):
-        r = RELIC_REWARD_RANGE
+        r = Params.RELIC_REWARD_RANGE
         relic_map = np.zeros((SPACE_SIZE + 2 * r, SPACE_SIZE + 2 * r), np.int16)
         for node in self:
             if node.relic or not node.explored_for_relic:
@@ -270,14 +272,6 @@ class Space:
     def reward_nodes(self) -> set[Node]:
         return self._reward_nodes
 
-    @property
-    def all_relics_found(self) -> bool:
-        return self._all_relics_found
-
-    @property
-    def all_rewards_found(self) -> bool:
-        return self._all_rewards_found
-
     def show_map(self, ships=None):
         def int_to_str(i):
             s = str(int(i))
@@ -346,6 +340,12 @@ class Space:
         print(str_grid, file=err)
 
     def show_exploration_info(self):
+        print(
+            f"all relics found: {Params.ALL_RELICS_FOUND}, "
+            f"all rewards found: {Params.ALL_REWARDS_FOUND}",
+            file=err,
+        )
+
         def int_to_str(i):
             s = str(int(i))
             return " " + s if len(s) < 2 else s

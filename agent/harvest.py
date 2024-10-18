@@ -5,7 +5,10 @@ from .fleet import Fleet, path_to_actions, PathFinder
 from .tasks import HarvestTask
 
 
-def harvest(step, space: Space, fleet: Fleet):
+def harvest(agent):
+    space = agent.space
+    fleet = agent.fleet
+
     finder = PathFinder(space)
 
     booked_nodes = set()

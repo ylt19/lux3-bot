@@ -3,8 +3,8 @@ import numpy as np
 from enum import IntEnum
 from pathfinding import Grid, AStar, ResumableDijkstra
 
-from .base import SPACE_SIZE, MAX_ENERGY_PER_TILE
-from .space import Node, Space
+from .base import Params
+from .space import Node, Space, NodeType
 
 
 class ActionType(IntEnum):
@@ -61,16 +61,10 @@ def path_to_actions(path):
 
 
 class Fleet:
-    def __init__(self, team_id, env_cfg):
+    def __init__(self, team_id):
         self.team_id: int = team_id
         self.points: int = 0
-
-        self.unit_move_cost = env_cfg["unit_move_cost"]
-        self.unit_sap_cost = env_cfg["unit_sap_cost"]
-        self.unit_sap_range = env_cfg["unit_sap_range"]
-        self.unit_sensor_range = env_cfg["unit_sensor_range"]
-
-        self.ships = [Ship(unit_id) for unit_id in range(env_cfg["max_units"])]
+        self.ships = [Ship(unit_id) for unit_id in range(Params.MAX_UNITS)]
 
     def __repr__(self):
         return f"Fleet({self.team_id})"
@@ -165,12 +159,14 @@ class PathFinder:
         return self.grid.calculate_cost(path)
 
     def _create_grid(self):
-        weights = np.zeros((SPACE_SIZE, SPACE_SIZE), np.int16)
+        weights = np.zeros((Params.SPACE_SIZE, Params.SPACE_SIZE), np.int16)
         for node in self._space:
             if not node.is_walkable:
                 w = -1
             else:
-                w = MAX_ENERGY_PER_TILE + 1 - node.energy
+                w = Params.MAX_ENERGY_PER_TILE + 1 - node.energy
+            if node.type == NodeType.nebula:
+                w += Params.NEBULA_ENERGY_REDUCTION
             weights[node.y][node.x] = w
 
         return Grid(weights)
