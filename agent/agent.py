@@ -34,12 +34,9 @@ class Agent:
         if self.state.match_step == 0:
             self.previous_state = self.state.copy()
 
-        space = self.state.space
-        fleet = self.state.fleet
-
-        # space.show_map(fleet)
-        # space.show_energy_field()
-        # space.show_exploration_info()
+        # self.state.show_map()
+        # self.state.show_energy_field()
+        # self.state.show_exploration_info()
 
         explore(self.state)
         harvest(self.state)
@@ -47,4 +44,4 @@ class Agent:
         # fleet.show_tasks()
 
         self.previous_state = self.state.copy()
-        return fleet.create_actions_array()
+        return self.state.create_actions_array()

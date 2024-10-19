@@ -94,14 +94,6 @@ class Fleet:
         for ship in self.ships:
             ship.clear()
 
-    def create_actions_array(self):
-        actions = np.zeros((len(self.ships), 3), dtype=int)
-        for i, ship in enumerate(self.ships):
-            if ship.action_queue:
-                a = ship.action_queue[0]
-                actions[i] = (a.type.value, a.dx, a.dy)
-        return actions
-
     def show_tasks(self):
         print("Tasks:", file=err)
         for ship in self:
