@@ -38,7 +38,7 @@ class Agent:
         # self.state.show_energy_field()
         # self.state.show_exploration_info()
 
-        explore(self.state)
+        explore(self.previous_state, self.state)
         harvest(self.state)
 
         # fleet.show_tasks()

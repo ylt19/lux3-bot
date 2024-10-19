@@ -11,10 +11,8 @@ class Params:
     UNIT_SAP_RANGE = 3  # OPTIONS: list(range(3, 8))
     UNIT_SENSOR_RANGE = 2  # OPTIONS: list(range(2, 5))
 
-    NEBULA_ENERGY_REDUCTION_OPTIONS = [0, 10, 100]
-
     # Agent parameters
-    NEBULA_ENERGY_REDUCTION = 10  # initial value
+    NEBULA_ENERGY_REDUCTION = 10  # OPTIONS: [0, 10, 100]
 
     # Exploration flags
     ALL_RELICS_FOUND = False

@@ -38,6 +38,7 @@ class State:
         self.space.update(obs, team_to_reward={self.team_id: reward})
         self.fleet.update(obs, self.space)
         self.opp_fleet.update(obs, self.space)
+        self.space.update_nodes_expected_sensor_mask(self.fleet.expected_sensor_mask())
 
     def _update_step_counters(self):
         self.global_step += 1

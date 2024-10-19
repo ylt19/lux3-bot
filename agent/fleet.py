@@ -1,5 +1,5 @@
-from sys import stderr as err
 import numpy as np
+from sys import stderr as err
 from enum import IntEnum
 from pathfinding import Grid, AStar, ResumableDijkstra
 
@@ -98,6 +98,20 @@ class Fleet:
         print("Tasks:", file=err)
         for ship in self:
             print(f" - {ship} : {ship.task}", file=err)
+
+    def expected_sensor_mask(self):
+        space_size = Params.SPACE_SIZE
+        sensor_range = Params.UNIT_SENSOR_RANGE
+        mask = np.zeros((space_size, space_size), dtype=np.int16)
+        for ship in self:
+            x, y = ship.coordinates
+            for _y in range(
+                max(0, y - sensor_range), min(space_size, y + sensor_range + 1)
+            ):
+                mask[_y][
+                    max(0, x - sensor_range) : min(space_size, x + sensor_range + 1)
+                ] = 1
+        return mask
 
 
 class Ship:

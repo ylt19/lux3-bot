@@ -36,6 +36,9 @@ class Node:
     def __hash__(self):
         return self.coordinates.__hash__()
 
+    def __eq__(self, other):
+        return self.x == other.x and self.y == other.y
+
     @property
     def relic(self):
         return self._relic
@@ -283,3 +286,9 @@ class Space:
     def clear(self):
         for node in self:
             node.type = NodeType.unknown
+
+    def update_nodes_expected_sensor_mask(self, expected_sensor_mask):
+        for y in range(SPACE_SIZE):
+            for x in range(SPACE_SIZE):
+                if expected_sensor_mask[y][x] == 1 and self.get_node(x, y).is_unknown:
+                    self.get_node(x, y).type = NodeType.nebula

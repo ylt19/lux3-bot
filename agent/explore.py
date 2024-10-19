@@ -1,12 +1,14 @@
 from sys import stderr as err
 
 from .base import Params, is_team_sector, nearby_positions
-from .space import Space
+from .space import Space, NodeType
 from .fleet import Fleet, PathFinder, path_to_actions
 from .tasks import FindRelicNodes, FindRewardNodes
 
 
-def explore(state):
+def explore(previous_state, state):
+    find_nebula_energy_reduction(previous_state, state)
+
     if state.global_step >= 150:
         delete_tasks(state.fleet, (FindRelicNodes, FindRewardNodes))
         return
@@ -129,3 +131,50 @@ def delete_tasks(fleet, task_type):
         if isinstance(ship.task, task_type):
             ship.task = None
             ship.action_queue = []
+
+
+def find_nebula_energy_reduction(previous_state, state):
+    if Params.NEBULA_ENERGY_REDUCTION_FOUND:
+        return
+
+    for previous_ship, ship in zip(previous_state.fleet, state.fleet):
+        if previous_ship.node is None or ship.node is None:
+            continue
+
+        node = ship.node
+        is_moving = int(node != previous_ship.node)
+
+        if previous_ship.energy < 30 - Params.UNIT_MOVE_COST * is_moving:
+            continue
+
+        if (
+            node.type != NodeType.nebula
+            or previous_state.space.get_node(*node.coordinates).type != NodeType.nebula
+        ):
+            continue
+
+        delta = (
+            previous_ship.energy
+            - ship.energy
+            + node.energy
+            - Params.UNIT_MOVE_COST * is_moving
+        )
+
+        # print(previous_ship.node, "->", node, "delta", delta, file=err)
+
+        if delta > 20:
+            Params.NEBULA_ENERGY_REDUCTION = 100
+        elif abs(delta - 10) < 5:
+            Params.NEBULA_ENERGY_REDUCTION = 10
+        elif abs(delta - 0) < 5:
+            Params.NEBULA_ENERGY_REDUCTION = 0
+        else:
+            continue
+
+        Params.NEBULA_ENERGY_REDUCTION_FOUND = True
+
+        print(
+            f"Find param NEBULA_ENERGY_REDUCTION = {Params.NEBULA_ENERGY_REDUCTION}",
+            file=err,
+        )
+        return
