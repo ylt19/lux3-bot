@@ -5,9 +5,9 @@ from .fleet import Fleet, path_to_actions, PathFinder
 from .tasks import HarvestTask
 
 
-def harvest(agent):
-    space = agent.space
-    fleet = agent.fleet
+def harvest(state):
+    space = state.space
+    fleet = state.fleet
 
     finder = PathFinder(space)
 
@@ -16,7 +16,7 @@ def harvest(agent):
         if not isinstance(ship.task, HarvestTask):
             continue
 
-        target = ship.task.node
+        target = space.get_node(*ship.task.coordinates)
         if ship.node == target:
             booked_nodes.add(target)
             ship.action_queue = []

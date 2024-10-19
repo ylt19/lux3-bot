@@ -57,7 +57,8 @@ class Node:
     def update_relic_status(self, status: bool):
         if self._explored_for_relic and self._relic != status:
             raise ValueError(
-                "Can't change relic status after the tile has already been explored"
+                f"Can't change the relic status for {self}"
+                ", the tile has already been explored"
             )
 
         self._relic = status
@@ -66,7 +67,8 @@ class Node:
     def update_reward_status(self, status: bool):
         if self._explored_for_reward and self._reward != status:
             raise ValueError(
-                "Can't change reward status after the tile has already been explored"
+                f"Can't change the reward status for {self}"
+                ", the tile has already been explored"
             )
 
         self._reward = status
@@ -81,7 +83,7 @@ class Node:
         return self.type != NodeType.asteroid
 
     @property
-    def coordinates(self):
+    def coordinates(self) -> tuple[int, int]:
         return self.x, self.y
 
     def manhattan_distance(self, other: "Node") -> int:
@@ -197,7 +199,7 @@ class Space:
                 continue
 
             self._reward_results.append({"nodes": ship_nodes, "reward": team_reward})
-            # print(self._reward_results, file=err)
+        # print(self._reward_results, file=err)
 
     def _update_reward_status_from_reward_results(self):
         filtered_results = []
@@ -232,6 +234,14 @@ class Space:
             if reward == len(nodes):
                 for node in nodes:
                     self._update_reward_status(*node.coordinates, status=True)
+                continue
+
+            if reward > len(nodes):
+                print(
+                    f"WARNING! Something wrong with reward result: {result}"
+                    ", this result will be ignored.",
+                    file=err,
+                )
                 continue
 
             filtered_results.append({"nodes": nodes, "reward": reward})

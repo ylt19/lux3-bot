@@ -6,13 +6,13 @@ from .fleet import Fleet, PathFinder, path_to_actions
 from .tasks import FindRelicNodes, FindRewardNodes
 
 
-def explore(agent):
-    if agent.global_step >= 150:
-        delete_tasks(agent.fleet, (FindRelicNodes, FindRewardNodes))
+def explore(state):
+    if state.global_step >= 150:
+        delete_tasks(state.fleet, (FindRelicNodes, FindRewardNodes))
         return
 
-    find_relics(agent.space, agent.fleet)
-    find_rewards(agent.space, agent.fleet)
+    find_relics(state.space, state.fleet)
+    find_rewards(state.space, state.fleet)
 
 
 def find_relics(space: Space, fleet: Fleet):
@@ -76,7 +76,7 @@ def find_rewards(space: Space, fleet: Fleet):
         if not isinstance(ship.task, FindRewardNodes):
             continue
 
-        target = ship.task.node
+        target = space.get_node(*ship.task.coordinates)
         if target.explored_for_reward:
             ship.task = None
             ship.action_queue = []
