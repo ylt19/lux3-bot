@@ -24,7 +24,7 @@ class Node:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-        self.type = NodeType.empty
+        self.type = NodeType.unknown
         self.energy = 0
 
         self._relic = False
@@ -281,6 +281,10 @@ class Space:
     @property
     def reward_nodes(self) -> set[Node]:
         return self._reward_nodes
+
+    def clear(self):
+        for node in self:
+            node.type = NodeType.unknown
 
     def show_map(self, ships=None):
         def int_to_str(i):

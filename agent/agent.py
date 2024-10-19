@@ -1,50 +1,9 @@
 from sys import stderr as err
 
 from .base import Params
+from .state import State
 from .harvest import harvest
-from .space import Space
-from .fleet import Fleet
 from .explore import explore
-
-
-class State:
-    def __init__(self, team_id):
-        self.global_step = 0  # global step of the game
-        self.match_step = 0  # current step in the match
-        self.match_number = 0  # current match number
-
-        self.space = Space()
-        self.fleet = Fleet(team_id)
-        self.opp_fleet = Fleet(1 - team_id)
-
-    def update(self, obs):
-        if obs["steps"] > 0:
-            self._update_step_counters()
-
-        assert obs["steps"] == self.global_step
-        assert obs["match_steps"] == self.match_step
-
-        if self.match_step == 0:
-            self.fleet.clear()
-            self.opp_fleet.clear()
-            return
-
-        points = int(obs["team_points"][self.fleet.team_id])
-        reward = max(0, points - self.fleet.points)
-
-        self.space.update(obs, team_to_reward={self.fleet.team_id: reward})
-        self.fleet.update(obs, self.space)
-        self.opp_fleet.update(obs, self.space)
-
-    def _update_step_counters(self):
-        self.global_step += 1
-        self.match_step += 1
-        if self.match_step > Params.MAX_STEPS_IN_MATCH:
-            self.match_step = 0
-            self.match_number += 1
-
-    def steps_left_in_match(self):
-        return Params.MAX_STEPS_IN_MATCH - self.match_step
 
 
 class Agent:
@@ -61,6 +20,7 @@ class Agent:
         Params.UNIT_SENSOR_RANGE = env_cfg["unit_sensor_range"]
 
         self.state = State(self.team_id)
+        self.previous_state = self.state.copy()
 
     def act(self, step: int, obs, remaining_overage_time: int = 60):
         self.state.update(obs)
@@ -71,6 +31,9 @@ class Agent:
         #     file=err,
         # )
 
+        if self.state.match_step == 0:
+            self.previous_state = self.state.copy()
+
         space = self.state.space
         fleet = self.state.fleet
 
@@ -78,12 +41,10 @@ class Agent:
         # space.show_energy_field()
         # space.show_exploration_info()
 
-        if self.state.match_step == 0:
-            return fleet.create_actions_array()
-
         explore(self.state)
         harvest(self.state)
 
         # fleet.show_tasks()
 
+        self.previous_state = self.state.copy()
         return fleet.create_actions_array()
