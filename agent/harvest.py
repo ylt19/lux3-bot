@@ -1,7 +1,6 @@
 from sys import stderr as err
 
-from .space import Space
-from .fleet import Fleet, path_to_actions, PathFinder
+from .path import PathFinder, path_to_actions
 from .tasks import HarvestTask
 
 

@@ -1,8 +1,8 @@
 from sys import stderr as err
 
 from .base import Params, is_team_sector, nearby_positions
-from .space import Space, NodeType
-from .fleet import Fleet, PathFinder, path_to_actions
+from .path import PathFinder, path_to_actions
+from .space import NodeType
 from .tasks import FindRelicNodes, FindRewardNodes
 
 
