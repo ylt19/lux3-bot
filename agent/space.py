@@ -130,24 +130,27 @@ class Space:
                 self._relic_id_to_node[relic_id] = node
 
         explored_new_nodes = False
-        all_relics_found = True
-        all_rewards_found = True
         for node in self:
             x, y = node.coordinates
             node.type = NodeType(int(tile_type[x][y]))
-            self.get_opposite_node(x, y).type = node.type
-            if node.type != NodeType.unknown:
+            if not node.is_unknown:
                 node.energy = int(energy[x][y])
             else:
                 node.energy = None
 
+            if not node.explored_for_relic and not node.is_unknown:
+                status = node in relic_nodes
+                self._update_relic_status(x, y, status=status)
+                explored_new_nodes = True
+
+        all_relics_found = True
+        all_rewards_found = True
+        for node in self:
+            if not node.is_unknown:
+                self.get_opposite_node(*node.coordinates).type = node.type
+
             if not node.explored_for_relic:
-                if not node.is_unknown:
-                    status = node in relic_nodes
-                    self._update_relic_status(x, y, status=status)
-                    explored_new_nodes = True
-                else:
-                    all_relics_found = False
+                all_relics_found = False
 
             if not node.explored_for_reward:
                 all_rewards_found = False
