@@ -12,8 +12,8 @@ class Params:
     UNIT_SENSOR_RANGE = 2  # OPTIONS: list(range(2, 5))
 
     # Agent parameters
-    NEBULA_ENERGY_REDUCTION = 10  # OPTIONS: [0, 10, 100]
     HIDDEN_NODE_ENERGY = 0
+    NEBULA_ENERGY_REDUCTION = 10  # OPTIONS: [0, 10, 100]
 
     # Exploration flags
     ALL_RELICS_FOUND = False
@@ -52,7 +52,15 @@ def manhattan_distance(a, b) -> int:
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 
+def chebyshev_distance(a, b) -> int:
+    return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
+
+
 def nearby_positions(x, y, distance):
     for _x in range(max(0, x - distance), min(SPACE_SIZE, x + distance + 1)):
         for _y in range(max(0, y - distance), min(SPACE_SIZE, y + distance + 1)):
             yield _x, _y
+
+
+def get_spawn_location(team_id):
+    return (0, 0) if team_id == 0 else (SPACE_SIZE - 1, SPACE_SIZE - 1)

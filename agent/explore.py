@@ -148,6 +148,9 @@ def find_nebula_energy_reduction(previous_state, state):
             continue
 
         node = ship.node
+        if node.energy is None:
+            continue
+
         is_moving = int(node != previous_ship.node)
 
         if previous_ship.energy < 30 - Params.UNIT_MOVE_COST * is_moving:

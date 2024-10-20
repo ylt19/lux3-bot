@@ -3,9 +3,11 @@ import numpy as np
 from sys import stderr as err
 from collections import defaultdict
 
-from .base import Params
+from scipy.constants import sigma
+
+from .base import Params, get_spawn_location, chebyshev_distance
 from .space import Space, NodeType
-from .fleet import Fleet
+from .fleet import Fleet, ActionType
 
 
 class State:
@@ -93,11 +95,41 @@ class State:
     def create_actions_array(self):
         ships = self.fleet.ships
         actions = np.zeros((len(ships), 3), dtype=int)
+
+        spawn_pointer = self._get_spawn_pointer()
+        if spawn_pointer:
+            actions[:] = (ActionType.sap, *spawn_pointer)
+
         for i, ship in enumerate(ships):
+            if ship.node is not None:
+                actions[i][0] = ActionType.center
+
             if ship.action_queue:
                 a = ship.action_queue[0]
                 actions[i] = (a.type.value, a.dx, a.dy)
+
         return actions
+
+    def _get_spawn_pointer(self):
+        spawn_location = get_spawn_location(self.team_id)
+        target = None
+        min_distance = 0
+        for ship in self.fleet:
+            next_position = ship.next_position()
+
+            if next_position == spawn_location:
+                continue
+
+            distance = chebyshev_distance(spawn_location, next_position)
+            if distance > Params.UNIT_SAP_RANGE:
+                continue
+
+            if target is None or min_distance > distance:
+                min_distance = distance
+                target = next_position
+
+        if target:
+            return target[0] - spawn_location[0], target[1] - spawn_location[1]
 
     def show_visible_map(self):
         show_map(self.space, self.fleet, self.opp_fleet)

@@ -38,6 +38,21 @@ class ActionType(IntEnum):
             return ActionType.center
 
 
+ACTION_TO_DIRECTION = {
+    ActionType.center: (0, 0),
+    ActionType.up: (0, -1),
+    ActionType.right: (1, 0),
+    ActionType.down: (0, 1),
+    ActionType.left: (-1, 0),
+    ActionType.sap: (0, 0),
+}
+
+
+def apply_action(x, y, action_type) -> tuple[int, int]:
+    dx, dy = ACTION_TO_DIRECTION[action_type]
+    return x + dx, y + dy
+
+
 class Action:
     def __init__(self, action_type: ActionType, dx: int = 0, dy: int = 0):
         self.type = action_type
@@ -132,6 +147,17 @@ class Ship:
         self.node = None
         self.task = None
         self.action_queue = []
+
+    def can_move(self) -> bool:
+        return self.energy >= Params.UNIT_MOVE_COST
+
+    def can_sap(self) -> bool:
+        return self.energy >= Params.UNIT_SAP_COST
+
+    def next_position(self) -> tuple[int, int]:
+        if not self.can_move() or not self.action_queue:
+            return self.coordinates
+        return apply_action(*self.coordinates, action_type=self.action_queue[0].type)
 
 
 class PathFinder:
