@@ -15,8 +15,14 @@ class FindRewardNodes(Task):
         assert not node.explored_for_reward
         self.coordinates = node.x, node.y
 
+    def __repr__(self):
+        return f"FindRewardNodes{self.coordinates}"
+
 
 class HarvestTask(Task):
     def __init__(self, node: Node):
         assert node.reward
         self.coordinates = node.x, node.y
+
+    def __repr__(self):
+        return f"HarvestTask{self.coordinates}"

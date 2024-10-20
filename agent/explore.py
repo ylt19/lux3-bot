@@ -13,11 +13,14 @@ def explore(previous_state, state):
         delete_tasks(state.fleet, (FindRelicNodes, FindRewardNodes))
         return
 
-    find_relics(state.space, state.fleet)
-    find_rewards(state.space, state.fleet)
+    find_relics(state)
+    find_rewards(state)
 
 
-def find_relics(space: Space, fleet: Fleet):
+def find_relics(state):
+    space = state.space
+    fleet = state.fleet
+
     if Params.ALL_RELICS_FOUND:
         delete_tasks(fleet, FindRelicNodes)
         return
@@ -29,7 +32,7 @@ def find_relics(space: Space, fleet: Fleet):
         ):
             nodes_to_explore.add(node)
 
-    finder = PathFinder(space)
+    finder = PathFinder(state.explored_space)
 
     for ship in fleet:
         if ship.task and not isinstance(ship.task, FindRelicNodes):
@@ -66,12 +69,15 @@ def find_relics(space: Space, fleet: Fleet):
                     nodes_to_explore.remove(node)
 
 
-def find_rewards(space: Space, fleet: Fleet):
+def find_rewards(state):
+    space = state.space
+    fleet = state.fleet
+
     if Params.ALL_REWARDS_FOUND:
         delete_tasks(fleet, FindRewardNodes)
         return
 
-    finder = PathFinder(space)
+    finder = PathFinder(state.explored_space)
 
     booked_nodes = set()
     for ship in fleet:

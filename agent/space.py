@@ -23,7 +23,7 @@ class Node:
         self.x = x
         self.y = y
         self.type = NodeType.unknown
-        self.energy = 0
+        self.energy = None
 
         self._relic = False
         self._reward = False
@@ -135,7 +135,11 @@ class Space:
         for node in self:
             x, y = node.coordinates
             node.type = NodeType(int(tile_type[x][y]))
-            node.energy = int(energy[x][y])
+            self.get_opposite_node(x, y).type = node.type
+            if node.type != NodeType.unknown:
+                node.energy = int(energy[x][y])
+            else:
+                node.energy = None
 
             if not node.explored_for_relic:
                 if not node.is_unknown:
@@ -286,8 +290,9 @@ class Space:
     def clear(self):
         for node in self:
             node.type = NodeType.unknown
+            node.energy = None
 
-    def update_nodes_expected_sensor_mask(self, expected_sensor_mask):
+    def update_nodes_by_expected_sensor_mask(self, expected_sensor_mask):
         for y in range(SPACE_SIZE):
             for x in range(SPACE_SIZE):
                 if expected_sensor_mask[y][x] == 1 and self.get_node(x, y).is_unknown:

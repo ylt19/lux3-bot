@@ -13,6 +13,7 @@ class Params:
 
     # Agent parameters
     NEBULA_ENERGY_REDUCTION = 10  # OPTIONS: [0, 10, 100]
+    HIDDEN_NODE_ENERGY = 0
 
     # Exploration flags
     ALL_RELICS_FOUND = False

@@ -94,11 +94,6 @@ class Fleet:
         for ship in self.ships:
             ship.clear()
 
-    def show_tasks(self):
-        print("Tasks:", file=err)
-        for ship in self:
-            print(f" - {ship} : {ship.task}", file=err)
-
     def expected_sensor_mask(self):
         space_size = Params.SPACE_SIZE
         sensor_range = Params.UNIT_SENSOR_RANGE
@@ -167,12 +162,19 @@ class PathFinder:
     def _create_grid(self):
         weights = np.zeros((Params.SPACE_SIZE, Params.SPACE_SIZE), np.int16)
         for node in self._space:
+
             if not node.is_walkable:
                 w = -1
             else:
-                w = Params.MAX_ENERGY_PER_TILE + 1 - node.energy
+                node_energy = node.energy
+                if node_energy is None:
+                    node_energy = Params.HIDDEN_NODE_ENERGY
+
+                w = Params.MAX_ENERGY_PER_TILE + 1 - node_energy
+
             if node.type == NodeType.nebula:
                 w += Params.NEBULA_ENERGY_REDUCTION
+
             weights[node.y][node.x] = w
 
         return Grid(weights)

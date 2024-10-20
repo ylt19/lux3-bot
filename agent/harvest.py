@@ -9,7 +9,7 @@ def harvest(state):
     space = state.space
     fleet = state.fleet
 
-    finder = PathFinder(space)
+    finder = PathFinder(state.explored_space)
 
     booked_nodes = set()
     for ship in fleet:
