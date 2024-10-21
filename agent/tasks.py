@@ -12,7 +12,7 @@ class FindRelicNodes(Task):
 
 class FindRewardNodes(Task):
     def __init__(self, node: Node):
-        assert not node.explored_for_reward
+        assert node.relic
         self.coordinates = node.x, node.y
 
     def __repr__(self):

@@ -1,9 +1,10 @@
 import numpy as np
+from sys import stderr as err
 from enum import IntEnum
 from pathfinding import Grid, AStar, ResumableDijkstra
 
-from .base import Params
-from .space import NodeType
+from .base import Params, is_inside
+from .space import Space, NodeType
 
 DIRECTIONS = [
     (0, 0),  # center
@@ -80,6 +81,29 @@ def path_to_actions(path):
     return actions
 
 
+def energy_needed(space: Space, path: list[tuple[int, int]]):
+    if len(path) <= 1:
+        return 0
+
+    energy = 0
+    for x, y in path[1:]:
+        node = space.get_node(x, y)
+        energy -= node.energy
+        if node.type == NodeType.nebula:
+            energy += Params.NEBULA_ENERGY_REDUCTION
+
+    return energy
+
+
+def allowed_movements(x, y, space):
+    actions = []
+    for action in (ActionType.right, ActionType.left, ActionType.up, ActionType.down):
+        _x, _y = apply_action(x, y, action)
+        if is_inside(_x, _y) and space.is_walkable(_x, _y):
+            actions.append(action)
+    return actions
+
+
 class PathFinder:
     def __init__(self, space, algorithm=AStar):
         self._grid = None
@@ -127,3 +151,18 @@ class PathFinder:
 
     def get_resumable_search(self, start):
         return ResumableDijkstra(self.grid, start)
+
+    def find_closest_target(self, start, targets, rs=None):
+        if not targets:
+            return None, float("inf")
+
+        if not rs:
+            rs = self.get_resumable_search(start)
+
+        target, min_distance = None, float("inf")
+        for t in targets:
+            d = rs.distance(t)
+            if d < min_distance:
+                target, min_distance = t, d
+
+        return target, min_distance

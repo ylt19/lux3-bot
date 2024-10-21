@@ -3,11 +3,10 @@ import numpy as np
 from sys import stderr as err
 from collections import defaultdict
 
-from scipy.constants import sigma
-
 from .base import Params, get_spawn_location, chebyshev_distance
+from .path import ActionType
 from .space import Space, NodeType
-from .fleet import Fleet, ActionType
+from .fleet import Fleet
 
 
 class State:

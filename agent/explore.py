@@ -1,18 +1,13 @@
 from sys import stderr as err
 
 from .base import Params, is_team_sector, nearby_positions
-from .path import PathFinder, path_to_actions
-from .space import NodeType
+from .path import PathFinder, path_to_actions, allowed_movements, Action
+from .space import Node, NodeType
 from .tasks import FindRelicNodes, FindRewardNodes
 
 
 def explore(previous_state, state):
     find_nebula_energy_reduction(previous_state, state)
-
-    if state.global_step >= 150:
-        delete_tasks(state.fleet, (FindRelicNodes, FindRewardNodes))
-        return
-
     find_relics(state)
     find_rewards(state)
 
@@ -25,12 +20,12 @@ def find_relics(state):
         delete_tasks(fleet, FindRelicNodes)
         return
 
-    nodes_to_explore = set()
+    targets = set()
     for node in space:
         if not node.explored_for_relic and is_team_sector(
             fleet.team_id, *node.coordinates
         ):
-            nodes_to_explore.add(node)
+            targets.add(node.coordinates)
 
     finder = PathFinder(state.explored_space)
 
@@ -38,35 +33,25 @@ def find_relics(state):
         if ship.task and not isinstance(ship.task, FindRelicNodes):
             continue
 
-        if not nodes_to_explore:
+        if not targets:
             ship.task = None
             ship.action_queue = []
             continue
 
-        rs = finder.get_resumable_search(start=ship.coordinates)
-
-        min_distance = 0
-        target = None
-        for node in nodes_to_explore:
-            distance = rs.distance(node.coordinates)
-            if target is None or distance < min_distance:
-                min_distance = distance
-                target = node
-
-        if target is None or min_distance == float("inf"):
+        target, _ = finder.find_closest_target(ship.coordinates, targets)
+        if not target:
             ship.task = None
             ship.action_queue = []
             continue
 
-        path = finder.find_path(ship.coordinates, target.coordinates)
+        path = finder.find_path(ship.coordinates, target)
         ship.task = FindRelicNodes()
         ship.action_queue = path_to_actions(path)
 
         for x, y in path:
-            for _x, _y in nearby_positions(x, y, Params.UNIT_SENSOR_RANGE):
-                node = space.get_node(_x, _y)
-                if node in nodes_to_explore:
-                    nodes_to_explore.remove(node)
+            for xy in nearby_positions(x, y, Params.UNIT_SENSOR_RANGE):
+                if xy in targets:
+                    targets.remove(xy)
 
 
 def find_rewards(state):
@@ -77,59 +62,110 @@ def find_rewards(state):
         delete_tasks(fleet, FindRewardNodes)
         return
 
-    finder = PathFinder(state.explored_space)
+    relic_nodes = get_unexplored_relics(space, fleet.team_id)
 
-    booked_nodes = set()
+    relic_node_to_ship = {}
     for ship in fleet:
         if not isinstance(ship.task, FindRewardNodes):
             continue
 
-        target = space.get_node(*ship.task.coordinates)
-        if target.explored_for_reward:
+        relic_node = space.get_node(*ship.task.coordinates)
+        if relic_node not in relic_nodes or ship.energy < Params.UNIT_MOVE_COST * 10:
             ship.task = None
             ship.action_queue = []
             continue
 
-        path = finder.find_path(ship.coordinates, target.coordinates)
-        if path and path[-1] == target.coordinates:
-            booked_nodes.add(target)
-            ship.action_queue = path_to_actions(path)
-        else:
-            ship.task = None
-            ship.action_queue = []
+        relic_node_to_ship[relic_node] = ship
 
-    target_nodes = set()
-    for node in space:
-        if (
-            not node.explored_for_reward
-            and is_team_sector(fleet.team_id, *node.coordinates)
-            and node not in booked_nodes
+    finder = PathFinder(state.explored_space)
+
+    for relic in relic_nodes:
+        if relic not in relic_node_to_ship:
+            ship = find_ship_for_reward_task(space, fleet, relic, finder)
+            if ship:
+                relic_node_to_ship[relic] = ship
+                ship.task = FindRewardNodes(relic)
+
+    relic_ships = sorted(list(relic_node_to_ship.items()), key=lambda _: _[1].unit_id)
+
+    pause_action = False
+    for relic_node, ship in relic_ships:
+
+        targets = []
+        for x, y in nearby_positions(
+            *relic_node.coordinates, Params.RELIC_REWARD_RANGE
         ):
-            target_nodes.add(node)
+            node = space.get_node(x, y)
+            if not node.explored_for_reward:
+                targets.append((x, y))
 
-    for ship in fleet:
-        if ship.task or not target_nodes:
-            continue
+        target, _ = finder.find_closest_target(ship.coordinates, targets)
 
-        rs = finder.get_resumable_search(start=ship.coordinates)
+        if target == ship.coordinates:
+            if not pause_action:
+                pause_action = True
+            else:
+                target, _ = finder.find_closest_target(
+                    ship.coordinates,
+                    targets=[n.coordinates for n in space if n.explored_for_reward],
+                )
 
-        min_distance = 0
-        target = None
-        for node in target_nodes:
-            distance = rs.distance(node.coordinates)
-            if target is None or distance < min_distance:
-                min_distance = distance
-                target = node
-
-        if target is None or min_distance == float("inf"):
-            ship.task = None
+        if not target:
             ship.action_queue = []
             continue
 
-        target_nodes.remove(target)
-        path = finder.find_path(ship.coordinates, target.coordinates)
-        ship.task = FindRewardNodes(target)
+        path = finder.find_path(ship.coordinates, target)
         ship.action_queue = path_to_actions(path)
+
+
+def get_unexplored_relics(space, team_id) -> list[Node]:
+    relic_nodes = []
+    for relic_node in space.relic_nodes:
+        if not is_team_sector(team_id, *relic_node.coordinates):
+            continue
+
+        explored = True
+        for x, y in nearby_positions(
+            *relic_node.coordinates, Params.RELIC_REWARD_RANGE
+        ):
+            node = space.get_node(x, y)
+            if not node.explored_for_reward and node.is_walkable:
+                explored = False
+                break
+
+        if explored:
+            continue
+
+        relic_nodes.append(relic_node)
+
+    return relic_nodes
+
+
+def find_ship_for_reward_task(space, fleet, relic_node, finder):
+    free_ships = []
+    for ship in fleet:
+        if isinstance(ship.task, FindRewardNodes):
+            continue
+        if ship.energy < Params.UNIT_MOVE_COST * 10:
+            continue
+        free_ships.append(ship)
+
+    if not free_ships:
+        return
+
+    unexplored = []
+    for x, y in nearby_positions(*relic_node.coordinates, Params.RELIC_REWARD_RANGE):
+        node = space.get_node(x, y)
+        if not node.explored_for_reward:
+            unexplored.append((x, y))
+
+    closest_ship, min_distance = None, float("inf")
+    for ship in free_ships:
+        _, distance = finder.find_closest_target(ship.coordinates, unexplored)
+        if distance < min_distance:
+            closest_ship, min_distance = ship, distance
+
+    return closest_ship
 
 
 def delete_tasks(fleet, task_type):

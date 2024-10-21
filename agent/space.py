@@ -300,3 +300,6 @@ class Space:
             for x in range(SPACE_SIZE):
                 if expected_sensor_mask[y][x] == 1 and self.get_node(x, y).is_unknown:
                     self.get_node(x, y).type = NodeType.nebula
+
+    def is_walkable(self, x, y):
+        return self.get_node(x, y).is_walkable
