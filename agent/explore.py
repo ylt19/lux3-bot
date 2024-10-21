@@ -1,7 +1,7 @@
 from sys import stderr as err
 
 from .base import Params, is_team_sector, nearby_positions
-from .path import PathFinder, path_to_actions, allowed_movements, Action
+from .path import PathFinder, path_to_actions, estimate_energy_cost
 from .space import Node, NodeType
 from .tasks import FindRelicNodes, FindRewardNodes
 
@@ -41,17 +41,21 @@ def find_relics(state):
         target, _ = finder.find_closest_target(ship.coordinates, targets)
         if not target:
             ship.task = None
-            ship.action_queue = []
             continue
 
         path = finder.find_path(ship.coordinates, target)
-        ship.task = FindRelicNodes()
-        ship.action_queue = path_to_actions(path)
+        energy = estimate_energy_cost(state.explored_space, path)
 
-        for x, y in path:
-            for xy in nearby_positions(x, y, Params.UNIT_SENSOR_RANGE):
-                if xy in targets:
-                    targets.remove(xy)
+        if ship.energy >= energy:
+            ship.task = FindRelicNodes()
+            ship.action_queue = path_to_actions(path)
+
+            for x, y in path:
+                for xy in nearby_positions(x, y, Params.UNIT_SENSOR_RANGE):
+                    if xy in targets:
+                        targets.remove(xy)
+        else:
+            ship.task = None
 
 
 def find_rewards(state):
@@ -84,7 +88,6 @@ def find_rewards(state):
             ship = find_ship_for_reward_task(space, fleet, relic, finder)
             if ship:
                 relic_node_to_ship[relic] = ship
-                ship.task = FindRewardNodes(relic)
 
     relic_ships = sorted(list(relic_node_to_ship.items()), key=lambda _: _[1].unit_id)
 
@@ -111,11 +114,16 @@ def find_rewards(state):
                 )
 
         if not target:
-            ship.action_queue = []
             continue
 
         path = finder.find_path(ship.coordinates, target)
-        ship.action_queue = path_to_actions(path)
+        energy = estimate_energy_cost(state.explored_space, path)
+        if ship.energy >= energy:
+            ship.action_queue = path_to_actions(path)
+            ship.task = FindRewardNodes(relic_node)
+        else:
+            if isinstance(ship.task, FindRewardNodes):
+                ship.task = None
 
 
 def get_unexplored_relics(space, team_id) -> list[Node]:
@@ -172,7 +180,6 @@ def delete_tasks(fleet, task_type):
     for ship in fleet:
         if isinstance(ship.task, task_type):
             ship.task = None
-            ship.action_queue = []
 
 
 def find_nebula_energy_reduction(previous_state, state):

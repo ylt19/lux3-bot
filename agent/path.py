@@ -81,14 +81,18 @@ def path_to_actions(path):
     return actions
 
 
-def energy_needed(space: Space, path: list[tuple[int, int]]):
+def estimate_energy_cost(space: Space, path: list[tuple[int, int]]):
     if len(path) <= 1:
         return 0
 
     energy = 0
     for x, y in path[1:]:
         node = space.get_node(x, y)
-        energy -= node.energy
+        if node.energy is not None:
+            energy -= node.energy
+        else:
+            energy -= Params.HIDDEN_NODE_ENERGY
+
         if node.type == NodeType.nebula:
             energy += Params.NEBULA_ENERGY_REDUCTION
 

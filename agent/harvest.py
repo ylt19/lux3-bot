@@ -1,6 +1,6 @@
 from sys import stderr as err
 
-from .path import PathFinder, path_to_actions
+from .path import PathFinder, path_to_actions, estimate_energy_cost
 from .tasks import HarvestTask
 
 
@@ -27,7 +27,6 @@ def harvest(state):
             ship.action_queue = path_to_actions(path)
         else:
             ship.task = None
-            ship.action_queue = []
 
     target_nodes = set()
     for n in space.reward_nodes:
@@ -55,5 +54,10 @@ def harvest(state):
 
         target_nodes.remove(target)
         path = finder.find_path(ship.coordinates, target.coordinates)
-        ship.task = HarvestTask(target)
-        ship.action_queue = path_to_actions(path)
+        energy = estimate_energy_cost(state.explored_space, path)
+
+        if ship.energy >= energy:
+            ship.task = HarvestTask(target)
+            ship.action_queue = path_to_actions(path)
+        else:
+            ship.task = None

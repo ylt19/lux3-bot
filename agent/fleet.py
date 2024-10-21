@@ -35,6 +35,8 @@ class Fleet:
             else:
                 ship.clear()
 
+            ship.action_queue = []
+
     def clear(self):
         self.points = 0
         for ship in self.ships:
