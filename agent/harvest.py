@@ -1,7 +1,7 @@
 from sys import stderr as err
 
 from .path import PathFinder, path_to_actions, estimate_energy_cost
-from .tasks import HarvestTask
+from .tasks import HarvestTask, GatherEnergy
 
 
 def harvest(state):
@@ -12,52 +12,45 @@ def harvest(state):
 
     booked_nodes = set()
     for ship in fleet:
-        if not isinstance(ship.task, HarvestTask):
-            continue
+        if isinstance(ship.task, HarvestTask):
+            target = ship.task.coordinates
+            if set_path_to_target(state, ship, target, finder):
+                booked_nodes.add(state.space.get_node(*target))
+            else:
+                ship.task = None
 
-        target = space.get_node(*ship.task.coordinates)
-        if ship.node == target:
-            booked_nodes.add(target)
-            ship.action_queue = []
-            continue
-
-        path = finder.find_path(ship.coordinates, target.coordinates)
-        if path and path[-1] == target.coordinates:
-            booked_nodes.add(target)
-            ship.action_queue = path_to_actions(path)
-        else:
-            ship.task = None
-
-    target_nodes = set()
+    targets = set()
     for n in space.reward_nodes:
         if n.is_walkable and n not in booked_nodes:
-            target_nodes.add(n)
-    if not target_nodes:
+            targets.add(n.coordinates)
+    if not targets:
         return
 
     for ship in fleet:
-        if ship.task:
+        if ship.task and not isinstance(ship.task, GatherEnergy):
             continue
 
-        rs = finder.get_resumable_search(start=ship.coordinates)
-
-        min_distance = 0
-        target = None
-        for node in target_nodes:
-            distance = rs.distance(node.coordinates)
-            if target is None or distance < min_distance:
-                min_distance = distance
-                target = node
-
-        if target is None or min_distance == float("inf"):
+        target, _ = finder.find_closest_target(ship.coordinates, targets)
+        if not target:
             continue
 
-        target_nodes.remove(target)
-        path = finder.find_path(ship.coordinates, target.coordinates)
-        energy = estimate_energy_cost(state.explored_space, path)
+        if set_path_to_target(state, ship, target, finder):
+            targets.remove(target)
 
-        if ship.energy >= energy:
-            ship.task = HarvestTask(target)
-            ship.action_queue = path_to_actions(path)
-        else:
-            ship.task = None
+
+def set_path_to_target(state, ship, target, finder) -> bool:
+    if ship.coordinates == target:
+        return True
+
+    if not ship.can_move():
+        return False
+
+    path = finder.find_path(ship.coordinates, target)
+    energy = estimate_energy_cost(state.explored_space, path)
+
+    if ship.energy < energy:
+        return False
+
+    ship.task = HarvestTask(state.space.get_node(*target))
+    ship.action_queue = path_to_actions(path)
+    return True

@@ -118,6 +118,7 @@ class PathFinder:
         self._finder = None
         self._space = space
         self._algorithm = algorithm
+        self._components = None
 
     @property
     def grid(self):
@@ -174,3 +175,16 @@ class PathFinder:
                 target, min_distance = t, d
 
         return target, min_distance
+
+    @property
+    def components(self):
+        if self._components is None:
+            self._components = self.grid.find_components()
+            self._components = [set(x) for x in self._components]
+        return self._components
+
+    def get_available_locations(self, coordinates):
+        for component in self.components:
+            if coordinates in component:
+                return component
+        return {coordinates}

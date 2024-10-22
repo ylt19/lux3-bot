@@ -82,10 +82,14 @@ class Ship:
         self.action_queue = []
 
     def can_move(self) -> bool:
-        return self.energy >= Params.UNIT_MOVE_COST
+        return (
+            self.node is not None
+            and self.node.is_walkable
+            and self.energy >= Params.UNIT_MOVE_COST
+        )
 
     def can_sap(self) -> bool:
-        return self.energy >= Params.UNIT_SAP_COST
+        return self.node is not None and self.energy >= Params.UNIT_SAP_COST
 
     def next_position(self) -> tuple[int, int]:
         if not self.can_move() or not self.action_queue:

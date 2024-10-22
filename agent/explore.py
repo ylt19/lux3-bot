@@ -3,7 +3,7 @@ from sys import stderr as err
 from .base import Params, is_team_sector, nearby_positions
 from .path import PathFinder, path_to_actions, estimate_energy_cost
 from .space import Node, NodeType
-from .tasks import FindRelicNodes, FindRewardNodes
+from .tasks import FindRelicNodes, FindRewardNodes, GatherEnergy
 
 
 def explore(previous_state, state):
@@ -30,12 +30,11 @@ def find_relics(state):
     finder = PathFinder(state.explored_space)
 
     for ship in fleet:
-        if ship.task and not isinstance(ship.task, FindRelicNodes):
+        if ship.task and not isinstance(ship.task, (FindRelicNodes, GatherEnergy)):
             continue
 
         if not targets:
             ship.task = None
-            ship.action_queue = []
             continue
 
         target, _ = finder.find_closest_target(ship.coordinates, targets)

@@ -4,6 +4,7 @@ from .base import Params
 from .state import State
 from .harvest import harvest
 from .explore import explore
+from .gather_energy import gather_energy
 
 
 class Agent:
@@ -42,6 +43,7 @@ class Agent:
 
         explore(self.previous_state, self.state)
         harvest(self.state)
+        gather_energy(self.state)
 
         # self.state.show_tasks()
 

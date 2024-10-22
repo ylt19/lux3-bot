@@ -26,3 +26,7 @@ class HarvestTask(Task):
 
     def __repr__(self):
         return f"HarvestTask{self.coordinates}"
+
+
+class GatherEnergy(Task):
+    pass
