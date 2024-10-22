@@ -1,5 +1,6 @@
 from .cpf import (
     Grid,
+    Graph,
     BFS,
     Dijkstra,
     AStar,
