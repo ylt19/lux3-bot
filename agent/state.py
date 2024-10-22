@@ -25,6 +25,8 @@ class State:
         self.fleet = Fleet(team_id)
         self.opp_fleet = Fleet(1 - team_id)
 
+        self._obstacles_movement_status = []
+
     def update(self, obs):
         if obs["steps"] > 0:
             self._update_step_counters()
@@ -36,6 +38,7 @@ class State:
             self.fleet.clear()
             self.opp_fleet.clear()
             self.space.clear()
+            self._update_explored_space()
             return
 
         points = int(obs["team_points"][self.team_id])
@@ -44,9 +47,14 @@ class State:
         self.space.update(obs, team_to_reward={self.team_id: reward})
         self.fleet.update(obs, self.space)
         self.opp_fleet.update(obs, self.space)
-        self.space.update_nodes_by_expected_sensor_mask(
-            self.fleet.expected_sensor_mask()
-        )
+
+        if (
+            Params.OBSTACLE_MOVEMENT_PERIOD == 0
+            or (self.global_step - 1) % Params.OBSTACLE_MOVEMENT_PERIOD != 0
+        ):
+            self.space.update_nodes_by_expected_sensor_mask(
+                self.fleet.expected_sensor_mask()
+            )
 
         self._update_explored_space()
 
@@ -58,32 +66,104 @@ class State:
             self.match_number += 1
 
     def _update_explored_space(self):
-        energy_nodes_shifted = False
-        obstacles_shifted = False
+        self._update_explored_relics()
+        self._update_explored_energy()
+        self._update_explored_map()
 
-        for v in self.space:
+    def _update_explored_map(self):
+        if (
+            Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
+            and Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
+            and Params.OBSTACLE_MOVEMENT_PERIOD > 0
+            and (self.global_step - 1) % Params.OBSTACLE_MOVEMENT_PERIOD == 0
+        ):
+            self.explored_space.move(*Params.OBSTACLE_MOVEMENT_DIRECTION, inplace=True)
 
-            e = self.explored_space.get_node(*v.coordinates)
-
-            if v.energy is not None:
-                if e.energy is None:
-                    e.energy = v.energy
-                elif e.energy != v.energy:
-                    energy_nodes_shifted = True
-
-            if not v.is_unknown:
-                if e.is_unknown:
-                    e.type = v.type
-                elif e.type != v.type:
+        obstacles_shifted = None
+        for e, v in zip(self.explored_space, self.space):
+            if not e.is_unknown and not v.is_unknown:
+                if e.type != v.type:
                     obstacles_shifted = True
+                elif obstacles_shifted is None and (
+                    v.type == NodeType.asteroid or v.type == NodeType.nebula
+                ):
+                    obstacles_shifted = False
 
-        if energy_nodes_shifted:
-            for e in self.explored_space:
-                e.energy = self.space.get_node(*e.coordinates).energy
+        self._obstacles_movement_status.append(obstacles_shifted)
+        if not Params.OBSTACLE_MOVEMENT_PERIOD_FOUND:
+            period = _get_obstacle_movement_period(self._obstacles_movement_status)
+            if period is not None:
+                Params.OBSTACLE_MOVEMENT_PERIOD_FOUND = True
+                Params.OBSTACLE_MOVEMENT_PERIOD = period
+                print(
+                    f"Find param OBSTACLE_MOVEMENT_PERIOD_FOUND = {period}",
+                    file=err,
+                )
+                if period == 0:
+                    direction = (0, 0)
+                    Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND = True
+                    Params.OBSTACLE_MOVEMENT_DIRECTION = direction
+                    print(
+                        f"Find param OBSTACLE_MOVEMENT_DIRECTION = {direction}",
+                        file=err,
+                    )
+
+        if obstacles_shifted and not Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND:
+            direction = _get_obstacle_movement_direction(
+                self.explored_space, self.space
+            )
+            if direction:
+                Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND = True
+                Params.OBSTACLE_MOVEMENT_DIRECTION = direction
+                print(
+                    f"Find param OBSTACLE_MOVEMENT_DIRECTION = {direction}",
+                    file=err,
+                )
+
+                self.explored_space.move(
+                    *Params.OBSTACLE_MOVEMENT_DIRECTION, inplace=True
+                )
+                obstacles_shifted = False
+            else:
+                print("WARNING: Can't find OBSTACLE_MOVEMENT_DIRECTION", file=err)
 
         if obstacles_shifted:
-            for e in self.explored_space:
-                e.type = self.space.get_node(*e.coordinates).type
+            if (
+                Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
+                and Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
+            ):
+                print("WARNING: OBSTACLE_MOVEMENTS params are incorrect", file=err)
+
+            for e, v in zip(self.explored_space, self.space):
+                e.type = v.type
+        else:
+            for e, v in zip(self.explored_space, self.space):
+                if e.is_unknown and not v.is_unknown:
+                    e.type = v.type
+
+    def _update_explored_energy(self):
+        energy_nodes_shifted = False
+        for e, v in zip(self.explored_space, self.space):
+            if e.energy is not None and v.energy is not None:
+                if e.energy != v.energy:
+                    energy_nodes_shifted = True
+
+        if energy_nodes_shifted:
+            for e, v in zip(self.explored_space, self.space):
+                e.energy = v.energy
+        else:
+            for e, v in zip(self.explored_space, self.space):
+                if e.energy is None and v.energy is not None:
+                    e.energy = v.energy
+
+    def _update_explored_relics(self):
+        for relic_node in self.space.relic_nodes:
+            node = self.explored_space.get_node(*relic_node.coordinates)
+            node.update_relic_status(True)
+
+        for reward_node in self.space.reward_nodes:
+            node = self.explored_space.get_node(*reward_node.coordinates)
+            node.update_reward_status(True)
 
     def steps_left_in_match(self) -> int:
         return Params.MAX_STEPS_IN_MATCH - self.match_step
@@ -278,3 +358,39 @@ def show_exploration_info(space):
 
     str_grid += line
     print(str_grid, file=err)
+
+
+def _get_obstacle_movement_direction(space, next_space):
+    for direction in [(1, -1), (-1, 1)]:
+        moved_space = space.move(*direction, inplace=False)
+        # show_map(moved_space, hide_by_energy=False)
+        # show_map(next_space, hide_by_energy=False)
+
+        match = True
+        for n1, n2 in zip(moved_space, next_space):
+            if not n1.is_unknown and not n2.is_unknown and n1.type != n2.type:
+                match = False
+                break
+
+        if match:
+            return direction
+
+
+def _get_obstacle_movement_period(obstacles_movement_status):
+    if not obstacles_movement_status:
+        return
+
+    last_status = obstacles_movement_status[-1]
+    if (
+        last_status is False
+        and len(obstacles_movement_status) > 41
+        and not any(x for x in obstacles_movement_status)
+    ):
+        # obstacles are static
+        return 0
+
+    if last_status is True:
+        if len(obstacles_movement_status) - 21 % 40 < 20:
+            return 20
+        else:
+            return 40

@@ -1,8 +1,9 @@
 import numpy as np
+from copy import deepcopy
 from sys import stderr as err
 from enum import IntEnum
 
-from .base import Params, SPACE_SIZE, get_opposite
+from .base import Params, SPACE_SIZE, get_opposite, warp_point
 
 
 class NodeType(IntEnum):
@@ -303,3 +304,17 @@ class Space:
 
     def is_walkable(self, x, y):
         return self.get_node(x, y).is_walkable
+
+    def move(self, dx: int, dy: int, *, inplace=False) -> "Space":
+        if not inplace:
+            new_space = deepcopy(self)
+            for node in self:
+                x, y = warp_point(node.x + dx, node.y + dy)
+                new_space.get_node(x, y).type = node.type
+            return new_space
+        else:
+            types = [n.type for n in self]
+            for node, node_type in zip(self, types):
+                x, y = warp_point(node.x + dx, node.y + dy)
+                self.get_node(x, y).type = node_type
+            return self

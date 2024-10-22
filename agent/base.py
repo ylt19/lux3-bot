@@ -14,11 +14,15 @@ class Params:
     # Agent parameters
     HIDDEN_NODE_ENERGY = 0
     NEBULA_ENERGY_REDUCTION = 10  # OPTIONS: [0, 10, 100]
+    OBSTACLE_MOVEMENT_PERIOD = 20  # OPTIONS: 0, 20, 40
+    OBSTACLE_MOVEMENT_DIRECTION = (0, 0)  # OPTIONS: [(1, -1), (-1, 1)]
 
     # Exploration flags
     ALL_RELICS_FOUND = False
     ALL_REWARDS_FOUND = False
     NEBULA_ENERGY_REDUCTION_FOUND = False
+    OBSTACLE_MOVEMENT_PERIOD_FOUND = False
+    OBSTACLE_MOVEMENT_DIRECTION_FOUND = False
 
 
 SPACE_SIZE = Params.SPACE_SIZE
@@ -64,3 +68,15 @@ def nearby_positions(x, y, distance):
 
 def get_spawn_location(team_id):
     return (0, 0) if team_id == 0 else (SPACE_SIZE - 1, SPACE_SIZE - 1)
+
+
+def warp_int(x):
+    if x >= SPACE_SIZE:
+        x -= SPACE_SIZE
+    elif x < 0:
+        x += SPACE_SIZE
+    return x
+
+
+def warp_point(x, y):
+    return warp_int(x), warp_int(y)
