@@ -86,6 +86,7 @@ def estimate_energy_cost(space: Space, path: list[tuple[int, int]]):
         return 0
 
     energy = 0
+    last_position = path[0]
     for x, y in path[1:]:
         node = space.get_node(x, y)
         if node.energy is not None:
@@ -95,6 +96,9 @@ def estimate_energy_cost(space: Space, path: list[tuple[int, int]]):
 
         if node.type == NodeType.nebula:
             energy += Params.NEBULA_ENERGY_REDUCTION
+
+        if (x, y) != last_position:
+            energy += Params.UNIT_MOVE_COST
 
     return energy
 
