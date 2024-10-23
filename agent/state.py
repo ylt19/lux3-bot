@@ -380,16 +380,7 @@ def _get_obstacle_movement_period(obstacles_movement_status):
     if not obstacles_movement_status:
         return
 
-    last_status = obstacles_movement_status[-1]
-    if (
-        last_status is False
-        and len(obstacles_movement_status) > 41
-        and not any(x for x in obstacles_movement_status)
-    ):
-        # obstacles are static
-        return 0
-
-    if last_status is True:
+    if obstacles_movement_status[-1] is True:
         if len(obstacles_movement_status) - 21 % 40 < 20:
             return 20
         else:

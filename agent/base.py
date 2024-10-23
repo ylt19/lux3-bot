@@ -14,7 +14,7 @@ class Params:
     # Agent parameters
     HIDDEN_NODE_ENERGY = 0
     NEBULA_ENERGY_REDUCTION = 10  # OPTIONS: [0, 10, 100]
-    OBSTACLE_MOVEMENT_PERIOD = 20  # OPTIONS: 0, 20, 40
+    OBSTACLE_MOVEMENT_PERIOD = 20  # OPTIONS: 20, 40
     OBSTACLE_MOVEMENT_DIRECTION = (0, 0)  # OPTIONS: [(1, -1), (-1, 1)]
 
     # Exploration flags
