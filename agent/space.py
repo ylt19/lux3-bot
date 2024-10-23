@@ -25,6 +25,7 @@ class Node:
         self.y = y
         self.type = NodeType.unknown
         self.energy = None
+        self.is_visible = False
 
         self._relic = False
         self._reward = False
@@ -103,6 +104,7 @@ class Space:
         self._relic_nodes: set[Node] = set()
         self._reward_nodes: set[Node] = set()
         self._reward_results = []
+        self._obstacles_movement_status = []
 
     def __repr__(self) -> str:
         return f"Space({SPACE_SIZE}x{SPACE_SIZE})"
@@ -117,38 +119,22 @@ class Space:
     def get_opposite_node(self, x, y) -> Node:
         return self.get_node(*get_opposite(x, y))
 
-    def update(self, obs, team_to_reward=None):
-        tile_type = obs["map_features"]["tile_type"]
-        energy = obs["map_features"]["energy"]
+    def update(self, global_step, obs, team_to_reward=None):
+        self.move_obstacles(global_step)
+        self._update_map(obs)
 
-        relic_nodes = set()
         for relic_id, (mask, xy) in enumerate(
             zip(obs["relic_nodes_mask"], obs["relic_nodes"])
         ):
             if mask:
-                node = self.get_node(*xy)
-                relic_nodes.add(node)
-                self._relic_id_to_node[relic_id] = node
-
-        explored_new_nodes = False
-        for node in self:
-            x, y = node.coordinates
-            node.type = NodeType(int(tile_type[x][y]))
-            if not node.is_unknown:
-                node.energy = int(energy[x][y])
-            else:
-                node.energy = None
-
-            if not node.explored_for_relic and not node.is_unknown:
-                status = node in relic_nodes
-                self._update_relic_status(x, y, status=status)
-                explored_new_nodes = True
+                self._update_relic_status(*xy, status=True)
+                self._relic_id_to_node[relic_id] = self.get_node(*xy)
 
         all_relics_found = True
         all_rewards_found = True
         for node in self:
-            if not node.is_unknown:
-                self.get_opposite_node(*node.coordinates).type = node.type
+            if node.is_visible and not node.explored_for_relic:
+                self._update_relic_status(*node.coordinates, status=False)
 
             if not node.explored_for_relic:
                 all_relics_found = False
@@ -166,16 +152,103 @@ class Space:
                 for node in self:
                     if not node.explored_for_relic:
                         self._update_relic_status(*node.coordinates, status=False)
-                        explored_new_nodes = True
 
         if not Params.ALL_REWARDS_FOUND:
-            if explored_new_nodes:
-                self._update_reward_status_from_relics_distribution()
+            self._update_reward_status_from_relics_distribution()
 
             if team_to_reward:
                 self._update_reward_results(obs, team_to_reward)
 
             self._update_reward_status_from_reward_results()
+
+    def _update_map(self, obs):
+        sensor_mask = obs["sensor_mask"]
+        obs_energy = obs["map_features"]["energy"]
+        obs_tile_type = obs["map_features"]["tile_type"]
+
+        obstacles_shifted = False
+        energy_nodes_shifted = False
+        for node in self:
+            x, y = node.coordinates
+            is_visible = sensor_mask[x, y]
+
+            if (
+                is_visible
+                and not node.is_unknown
+                and node.type.value != obs_tile_type[x, y]
+            ):
+                obstacles_shifted = True
+
+            if (
+                is_visible
+                and node.energy is not None
+                and node.energy != obs_energy[x, y]
+            ):
+                energy_nodes_shifted = True
+
+        # print(
+        #     f"obstacles_shifted = {obstacles_shifted}, energy_nodes_shifted = {energy_nodes_shifted}",
+        #     file=err,
+        # )
+
+        self._obstacles_movement_status.append(obstacles_shifted)
+        if not Params.OBSTACLE_MOVEMENT_PERIOD_FOUND:
+            period = _get_obstacle_movement_period(self._obstacles_movement_status)
+            if period is not None:
+                Params.OBSTACLE_MOVEMENT_PERIOD_FOUND = True
+                Params.OBSTACLE_MOVEMENT_PERIOD = period
+                print(
+                    f"Find param OBSTACLE_MOVEMENT_PERIOD_FOUND = {period}",
+                    file=err,
+                )
+
+        if not Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND and obstacles_shifted:
+            direction = _get_obstacle_movement_direction(self, obs)
+            if direction:
+                Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND = True
+                Params.OBSTACLE_MOVEMENT_DIRECTION = direction
+                print(
+                    f"Find param OBSTACLE_MOVEMENT_DIRECTION = {direction}",
+                    file=err,
+                )
+
+                self.move(*Params.OBSTACLE_MOVEMENT_DIRECTION, inplace=True)
+                obstacles_shifted = False
+            else:
+                print("WARNING: Can't find OBSTACLE_MOVEMENT_DIRECTION", file=err)
+
+        if (
+            obstacles_shifted
+            and Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
+            and Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
+        ):
+            print("WARNING: OBSTACLE_MOVEMENTS params are incorrect", file=err)
+            for node in self:
+                node.type = NodeType.unknown
+
+        for node in self:
+            x, y = node.coordinates
+            is_visible = bool(sensor_mask[x, y])
+
+            node.is_visible = is_visible
+
+            if is_visible:
+                node.energy = int(obs_energy[x, y])
+            elif energy_nodes_shifted:
+                node.energy = None
+
+            if is_visible and node.is_unknown:
+                node.type = NodeType(int(obs_tile_type[x, y]))
+                self.get_opposite_node(x, y).type = node.type
+
+    def move_obstacles(self, global_step):
+        if (
+            Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
+            and Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
+            and Params.OBSTACLE_MOVEMENT_PERIOD > 0
+            and (global_step - 1) % Params.OBSTACLE_MOVEMENT_PERIOD == 0
+        ):
+            self.move(*Params.OBSTACLE_MOVEMENT_DIRECTION, inplace=True)
 
     def _update_reward_status_from_relics_distribution(self):
         r = Params.RELIC_REWARD_RANGE
@@ -293,8 +366,7 @@ class Space:
 
     def clear(self):
         for node in self:
-            node.type = NodeType.unknown
-            node.energy = None
+            node.is_visible = False
 
     def update_nodes_by_expected_sensor_mask(self, expected_sensor_mask):
         for y in range(SPACE_SIZE):
@@ -318,3 +390,36 @@ class Space:
                 x, y = warp_point(node.x + dx, node.y + dy)
                 self.get_node(x, y).type = node_type
             return self
+
+
+def _get_obstacle_movement_direction(space, obs):
+    sensor_mask = obs["sensor_mask"]
+    obs_tile_type = obs["map_features"]["tile_type"]
+
+    for direction in [(1, -1), (-1, 1)]:
+        moved_space = space.move(*direction, inplace=False)
+
+        match = True
+        for node in moved_space:
+            x, y = node.coordinates
+            if (
+                sensor_mask[x, y]
+                and not node.is_unknown
+                and obs_tile_type[x, y] != node.type.value
+            ):
+                match = False
+                break
+
+        if match:
+            return direction
+
+
+def _get_obstacle_movement_period(obstacles_movement_status):
+    if not obstacles_movement_status:
+        return
+
+    if obstacles_movement_status[-1] is True:
+        if len(obstacles_movement_status) - 21 % 40 < 20:
+            return 20
+        else:
+            return 40

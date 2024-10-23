@@ -27,7 +27,7 @@ def find_relics(state):
         ):
             targets.add(node.coordinates)
 
-    finder = PathFinder(state.explored_space)
+    finder = PathFinder(state.space)
 
     for ship in fleet:
         if ship.task and not isinstance(ship.task, (FindRelicNodes, GatherEnergy)):
@@ -43,7 +43,7 @@ def find_relics(state):
             continue
 
         path = finder.find_path(ship.coordinates, target)
-        energy = estimate_energy_cost(state.explored_space, path)
+        energy = estimate_energy_cost(state.space, path)
 
         if ship.energy >= energy:
             ship.task = FindRelicNodes()
@@ -80,7 +80,7 @@ def find_rewards(state):
 
         relic_node_to_ship[relic_node] = ship
 
-    finder = PathFinder(state.explored_space)
+    finder = PathFinder(state.space)
 
     for relic in relic_nodes:
         if relic not in relic_node_to_ship:
@@ -116,7 +116,7 @@ def find_rewards(state):
             continue
 
         path = finder.find_path(ship.coordinates, target)
-        energy = estimate_energy_cost(state.explored_space, path)
+        energy = estimate_energy_cost(state.space, path)
         if ship.energy >= energy:
             ship.action_queue = path_to_actions(path)
             ship.task = FindRewardNodes(relic_node)

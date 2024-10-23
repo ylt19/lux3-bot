@@ -9,6 +9,14 @@ from .space import Space, NodeType
 from .fleet import Fleet
 
 
+class Colors:
+    red = "\033[91m"
+    blue = "\033[94m"
+    yellow = "\033[93m"
+    green = "\033[92m"
+    endc = "\033[0m"
+
+
 class State:
     def __init__(self, team_id):
         self.team_id = team_id
@@ -16,12 +24,7 @@ class State:
         self.match_step = 0  # current step in the match
         self.match_number = 0  # current match number
 
-        # visible space, not hidden by the fog of war
         self.space = Space()
-
-        # explored space, regardless of whether it's hidden or not
-        self.explored_space = Space()
-
         self.fleet = Fleet(team_id)
         self.opp_fleet = Fleet(1 - team_id)
 
@@ -38,13 +41,13 @@ class State:
             self.fleet.clear()
             self.opp_fleet.clear()
             self.space.clear()
-            self._update_explored_space()
+            self.space.move_obstacles(self.global_step)
             return
 
         points = int(obs["team_points"][self.team_id])
         reward = max(0, points - self.fleet.points)
 
-        self.space.update(obs, team_to_reward={self.team_id: reward})
+        self.space.update(self.global_step, obs, team_to_reward={self.team_id: reward})
         self.fleet.update(obs, self.space)
         self.opp_fleet.update(obs, self.space)
 
@@ -56,114 +59,12 @@ class State:
                 self.fleet.expected_sensor_mask()
             )
 
-        self._update_explored_space()
-
     def _update_step_counters(self):
         self.global_step += 1
         self.match_step += 1
         if self.match_step > Params.MAX_STEPS_IN_MATCH:
             self.match_step = 0
             self.match_number += 1
-
-    def _update_explored_space(self):
-        self._update_explored_relics()
-        self._update_explored_energy()
-        self._update_explored_map()
-
-    def _update_explored_map(self):
-        if (
-            Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
-            and Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
-            and Params.OBSTACLE_MOVEMENT_PERIOD > 0
-            and (self.global_step - 1) % Params.OBSTACLE_MOVEMENT_PERIOD == 0
-        ):
-            self.explored_space.move(*Params.OBSTACLE_MOVEMENT_DIRECTION, inplace=True)
-
-        obstacles_shifted = None
-        for e, v in zip(self.explored_space, self.space):
-            if not e.is_unknown and not v.is_unknown:
-                if e.type != v.type:
-                    obstacles_shifted = True
-                elif obstacles_shifted is None and (
-                    v.type == NodeType.asteroid or v.type == NodeType.nebula
-                ):
-                    obstacles_shifted = False
-
-        self._obstacles_movement_status.append(obstacles_shifted)
-        if not Params.OBSTACLE_MOVEMENT_PERIOD_FOUND:
-            period = _get_obstacle_movement_period(self._obstacles_movement_status)
-            if period is not None:
-                Params.OBSTACLE_MOVEMENT_PERIOD_FOUND = True
-                Params.OBSTACLE_MOVEMENT_PERIOD = period
-                print(
-                    f"Find param OBSTACLE_MOVEMENT_PERIOD_FOUND = {period}",
-                    file=err,
-                )
-                if period == 0:
-                    direction = (0, 0)
-                    Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND = True
-                    Params.OBSTACLE_MOVEMENT_DIRECTION = direction
-                    print(
-                        f"Find param OBSTACLE_MOVEMENT_DIRECTION = {direction}",
-                        file=err,
-                    )
-
-        if obstacles_shifted and not Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND:
-            direction = _get_obstacle_movement_direction(
-                self.explored_space, self.space
-            )
-            if direction:
-                Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND = True
-                Params.OBSTACLE_MOVEMENT_DIRECTION = direction
-                print(
-                    f"Find param OBSTACLE_MOVEMENT_DIRECTION = {direction}",
-                    file=err,
-                )
-
-                self.explored_space.move(
-                    *Params.OBSTACLE_MOVEMENT_DIRECTION, inplace=True
-                )
-                obstacles_shifted = False
-            else:
-                print("WARNING: Can't find OBSTACLE_MOVEMENT_DIRECTION", file=err)
-
-        if obstacles_shifted:
-            if (
-                Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
-                and Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
-            ):
-                print("WARNING: OBSTACLE_MOVEMENTS params are incorrect", file=err)
-
-            for e, v in zip(self.explored_space, self.space):
-                e.type = v.type
-        else:
-            for e, v in zip(self.explored_space, self.space):
-                if e.is_unknown and not v.is_unknown:
-                    e.type = v.type
-
-    def _update_explored_energy(self):
-        energy_nodes_shifted = False
-        for e, v in zip(self.explored_space, self.space):
-            if e.energy is not None and v.energy is not None:
-                if e.energy != v.energy:
-                    energy_nodes_shifted = True
-
-        if energy_nodes_shifted:
-            for e, v in zip(self.explored_space, self.space):
-                e.energy = v.energy
-        else:
-            for e, v in zip(self.explored_space, self.space):
-                if e.energy is None and v.energy is not None:
-                    e.energy = v.energy
-
-    def _update_explored_relics(self):
-        for relic_node in self.space.relic_nodes:
-            node = self.explored_space.get_node(*relic_node.coordinates)
-            node.update_relic_status(True)
-
-        for reward_node in self.space.reward_nodes:
-            node = self.explored_space.get_node(*reward_node.coordinates)
-            node.update_reward_status(True)
 
     def steps_left_in_match(self) -> int:
         return Params.MAX_STEPS_IN_MATCH - self.match_step
@@ -211,18 +112,23 @@ class State:
             return target[0] - spawn_location[0], target[1] - spawn_location[1]
 
     def show_visible_map(self):
+        print("Visible map:", file=err)
         show_map(self.space, self.fleet, self.opp_fleet)
 
     def show_visible_energy_field(self):
+        print("Visible energy field:", file=err)
         show_energy_field(self.space)
 
     def show_explored_map(self):
-        show_map(self.explored_space, self.fleet, self.opp_fleet, hide_by_energy=False)
+        print("Explored map:", file=err)
+        show_map(self.space, self.fleet, self.opp_fleet, only_visible=False)
 
     def show_explored_energy_field(self):
-        show_energy_field(self.explored_space)
+        print("Explored energy field:", file=err)
+        show_energy_field(self.space, only_visible=False)
 
     def show_exploration_info(self):
+        print("Exploration info:", file=err)
         show_exploration_info(self.space)
 
     def show_tasks(self):
@@ -231,18 +137,10 @@ class State:
             print(f" - {ship} : {ship.task}", file=err)
 
 
-def show_map(space, my_fleet=None, opp_fleet=None, hide_by_energy=True):
-    def int_to_str(i):
-        s = str(int(i))
-        return " " + s if len(s) < 2 else s
-
+def show_map(space, my_fleet=None, opp_fleet=None, only_visible=True):
     ship_signs = (
         [" "] + [str(x) for x in range(1, 10)] + ["A", "B", "C", "D", "E", "F", "H"]
     )
-    red_color = "\033[91m"
-    blue_color = "\033[94m"
-    yellow_color = "\033[93m"
-    endc = "\033[0m"
 
     my_ships = defaultdict(int)
     for ship in my_fleet or []:
@@ -252,7 +150,7 @@ def show_map(space, my_fleet=None, opp_fleet=None, hide_by_energy=True):
     for ship in opp_fleet or []:
         opp_ships[ship.node.coordinates] += 1
 
-    line = " + " + " ".join([int_to_str(x) for x in range(Params.SPACE_SIZE)]) + "  +\n"
+    line = " + " + " ".join([f"{x:>2}" for x in range(Params.SPACE_SIZE)]) + "  +\n"
     str_grid = line
     for y in range(Params.SPACE_SIZE):
 
@@ -261,14 +159,9 @@ def show_map(space, my_fleet=None, opp_fleet=None, hide_by_energy=True):
         for x in range(Params.SPACE_SIZE):
             node = space.get_node(x, y)
 
-            if hide_by_energy:
-                if node.energy is None:
-                    str_row.append("..")
-                    continue
-            else:
-                if node.type == NodeType.unknown:
-                    str_row.append("..")
-                    continue
+            if node.type == NodeType.unknown or (only_visible and not node.is_visible):
+                str_row.append("..")
+                continue
 
             if node.type == NodeType.nebula:
                 s1 = "ñ" if node.relic else "n"
@@ -280,31 +173,31 @@ def show_map(space, my_fleet=None, opp_fleet=None, hide_by_energy=True):
             if node.reward:
                 if s1 == " ":
                     s1 = "_"
-                s1 = f"{yellow_color}{s1}{endc}"
+                s1 = f"{Colors.yellow}{s1}{Colors.endc}"
 
             if node.coordinates in my_ships:
                 num_ships = my_ships[node.coordinates]
-                s2 = f"{blue_color}{ship_signs[num_ships]}{endc}"
+                s2 = f"{Colors.blue}{ship_signs[num_ships]}{Colors.endc}"
             elif node.coordinates in opp_ships:
                 num_ships = opp_ships[node.coordinates]
-                s2 = f"{red_color}{ship_signs[num_ships]}{endc}"
+                s2 = f"{Colors.red}{ship_signs[num_ships]}{Colors.endc}"
             else:
                 s2 = " "
 
             str_row.append(s1 + s2)
 
-        str_grid += " ".join([int_to_str(y), " ".join(str_row), int_to_str(y), "\n"])
+        str_grid += " ".join([f"{y:>2}", *str_row, f"{y:>2}", "\n"])
 
     str_grid += line
     print(str_grid, file=err)
 
 
-def show_energy_field(space):
-    def int_to_str(i):
-        s = str(int(i))
-        return " " + s if len(s) < 2 else s
+def show_energy_field(space, only_visible=True):
+    def add_color(i):
+        color = Colors.green if i > 0 else Colors.red
+        return f"{color}{i:>3}{Colors.endc}"
 
-    line = " + " + " ".join([int_to_str(x) for x in range(Params.SPACE_SIZE)]) + "  +\n"
+    line = " + " + " ".join([f"{x:>2}" for x in range(Params.SPACE_SIZE)]) + "  +\n"
     str_grid = line
     for y in range(Params.SPACE_SIZE):
 
@@ -312,12 +205,12 @@ def show_energy_field(space):
 
         for x in range(Params.SPACE_SIZE):
             node = space.get_node(x, y)
-            if node.energy is None:
-                str_row.append("..")
+            if node.energy is None or (only_visible and not node.is_visible):
+                str_row.append(" ..")
             else:
-                str_row.append(int_to_str(node.energy))
+                str_row.append(add_color(node.energy))
 
-        str_grid += " ".join([int_to_str(y), " ".join(str_row), int_to_str(y), "\n"])
+        str_grid += "".join([f"{y:>2}", *str_row, f" {y:>2}", "\n"])
 
     str_grid += line
     print(str_grid, file=err)
@@ -330,11 +223,7 @@ def show_exploration_info(space):
         file=err,
     )
 
-    def int_to_str(i):
-        s = str(int(i))
-        return " " + s if len(s) < 2 else s
-
-    line = " + " + " ".join([int_to_str(x) for x in range(Params.SPACE_SIZE)]) + "  +\n"
+    line = " + " + " ".join([f"{x:>2}" for x in range(Params.SPACE_SIZE)]) + "  +\n"
     str_grid = line
     for y in range(Params.SPACE_SIZE):
 
@@ -354,34 +243,7 @@ def show_exploration_info(space):
 
             str_row.append(s1 + s2)
 
-        str_grid += " ".join([int_to_str(y), " ".join(str_row), int_to_str(y), "\n"])
+        str_grid += " ".join([f"{y:>2}", *str_row, f"{y:>2}", "\n"])
 
     str_grid += line
     print(str_grid, file=err)
-
-
-def _get_obstacle_movement_direction(space, next_space):
-    for direction in [(1, -1), (-1, 1)]:
-        moved_space = space.move(*direction, inplace=False)
-        # show_map(moved_space, hide_by_energy=False)
-        # show_map(next_space, hide_by_energy=False)
-
-        match = True
-        for n1, n2 in zip(moved_space, next_space):
-            if not n1.is_unknown and not n2.is_unknown and n1.type != n2.type:
-                match = False
-                break
-
-        if match:
-            return direction
-
-
-def _get_obstacle_movement_period(obstacles_movement_status):
-    if not obstacles_movement_status:
-        return
-
-    if obstacles_movement_status[-1] is True:
-        if len(obstacles_movement_status) - 21 % 40 < 20:
-            return 20
-        else:
-            return 40

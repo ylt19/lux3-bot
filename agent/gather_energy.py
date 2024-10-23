@@ -8,19 +8,19 @@ from .tasks import GatherEnergy
 def gather_energy(state: State):
 
     max_energy = 0
-    for node in state.explored_space:
+    for node in state.space:
         if node.energy is not None:
             max_energy = max(max_energy, node.energy)
 
     targets = []
-    for node in state.explored_space:
+    for node in state.space:
         if node.energy is not None and node.energy >= max_energy - 1:
             targets.append(node.coordinates)
 
     if not targets:
         return
 
-    finder = PathFinder(state.explored_space)
+    finder = PathFinder(state.space)
 
     for ship in state.fleet:
         if ship.task and not isinstance(ship.task, GatherEnergy):
@@ -35,7 +35,7 @@ def gather_energy(state: State):
             continue
 
         path = finder.find_path(ship.coordinates, target)
-        energy = estimate_energy_cost(state.explored_space, path)
+        energy = estimate_energy_cost(state.space, path)
 
         if ship.energy >= energy:
             ship.task = GatherEnergy()
@@ -47,7 +47,7 @@ def gather_energy(state: State):
 def get_positions_with_max_energy(state, positions):
     position_to_energy = {}
     for x, y in positions:
-        node = state.explored_space.get_node(x, y)
+        node = state.space.get_node(x, y)
 
         energy = node.energy
         if energy is None:
