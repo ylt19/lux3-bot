@@ -136,3 +136,22 @@ class TestGrid(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             grid.update_weight((9, 9), 10.9)
+
+    def test_calculate_cost(self):
+        weights = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+        grid = Grid(weights)
+
+        path = [(0, 1), (1, 1), (2, 1)]
+        cost = grid.calculate_cost(path)
+        self.assertEqual(cost, 5 + 6)
+
+    def test_calculate_cost_with_pause_action(self):
+        weights = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+        grid = Grid(weights)
+        path = [(1, 1), (1, 1), (1, 1)]
+
+        grid.pause_action_cost = 1.2
+        self.assertEqual(grid.calculate_cost(path), 2 * 1.2)
+
+        grid.pause_action_cost = "node.weight"
+        self.assertEqual(grid.calculate_cost(path), 2 * 5)

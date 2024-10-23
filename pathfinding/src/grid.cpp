@@ -185,7 +185,7 @@ double Grid::calculate_cost(Path& path) {
         Point next_point = get_coordinates(path[i]);
 
         if (point == next_point) {
-            total_cost += get_pause_action_cost();
+            total_cost += get_pause_action_cost(get_node_id(point));
             continue;
         }
 

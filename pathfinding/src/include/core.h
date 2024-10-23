@@ -61,7 +61,7 @@ class AbsGraph {
         vector<int> find_component_(vector<bool> &visited, int start);
 
     // For multi agent path finding
-    private:
+    protected:
         // the cost of the pause action
         double pause_action_cost_ = 1;
 
@@ -76,7 +76,11 @@ class AbsGraph {
             pause_action_cost_ = cost;
         }
 
-        double get_pause_action_cost() const {
+        virtual double get_pause_action_cost() const {
+            return pause_action_cost_;
+        }
+
+        virtual double get_pause_action_cost(int v) const {
             return pause_action_cost_;
         }
 
@@ -133,10 +137,40 @@ class AbsGrid : public AbsGraph {
         void set_weights(vector<double> &weights);
         vector<vector<int>> find_components() override;
 
+        int get_pause_action_cost_type() {
+            return pause_action_cost_type_;
+        }
+
+        void set_pause_action_cost_type(int type) {
+            if (type < 0 || type > 1) {
+                throw std::invalid_argument("value must be uint and les than 2");
+            }
+            pause_action_cost_type_ = type;
+        }
+
+        double get_pause_action_cost() const {
+            return pause_action_cost_;
+        }
+
+        double get_pause_action_cost(int v) const {
+            if (pause_action_cost_type_ == 0)
+                return pause_action_cost_;
+            else {
+                double w = weights_[v];
+                if (w < 0)
+                    return 0;
+                return w;
+            }
+        }
+
     protected:
         // if weight == -1 - there is an impassable obstacle, the node is unreachable
         // if weight >= 0 - weight is the cost of entering this node
         vector<double> weights_;
+
+        // 0 - pause action cost is the same for all nodes and is equal to graph.pause_action_cost_
+        // 1 - pause action cost is equal to the weight of the node
+        int pause_action_cost_type_ = 0;
 };
 
 

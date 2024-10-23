@@ -109,3 +109,27 @@ class TestSpaceTimeAStar(unittest.TestCase):
             path,
             [(0, 0), (1, 0), (1, 1), (1, 2), (0, 2), (0, 3), (0, 4), (1, 4), (2, 4)],
         )
+
+    def test_with_pause_action(self):
+        """
+        + -  -  - +
+        |    #    |
+        | s     e |
+        |    #    |
+        + -  -  - +
+        """
+        weights = [[2, -1, 1], [5, 1, 1], [1, -1, 1]]
+        grid = Grid(weights)
+
+        rt = ReservationTable(grid)
+        rt.add_path([(1, 1), (1, 1), (1, 1), (1, 1)], reserve_destination=False)
+
+        a = SpaceTimeAStar(grid)
+
+        grid.pause_action_cost = 1
+        path = a.find_path((0, 1), (2, 1), reservation_table=rt)
+        self.assertListEqual(path, [(0, 1), (0, 1), (0, 1), (0, 1), (1, 1), (2, 1)])
+
+        grid.pause_action_cost = "node.weight"
+        path = a.find_path((0, 1), (2, 1), reservation_table=rt)
+        self.assertListEqual(path, [(0, 1), (0, 2), (0, 2), (0, 1), (1, 1), (2, 1)])

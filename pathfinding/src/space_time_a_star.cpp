@@ -81,7 +81,6 @@ Path SpaceTimeAStar::find_path_with_depth_limit(
 
     int graph_size = graph->size();
     int max_terminal_time = start_time + search_depth;
-    double pause_action_cost = graph->get_pause_action_cost();
 
     typedef pair<double, Node*> key;
     priority_queue<key, vector<key>, std::greater<key>> openset;
@@ -142,7 +141,7 @@ Path SpaceTimeAStar::find_path_with_depth_limit(
             }
         }
         else {
-            process_node(current->node_id, pause_action_cost, current);
+            process_node(current->node_id, graph->get_pause_action_cost(current->node_id), current);
 
             auto reserved_edges = rt_.get_reserved_edges(current->time, current->node_id);
             for (auto &[node_id, cost] : graph->get_neighbors(current->node_id)) {
@@ -176,7 +175,6 @@ Path SpaceTimeAStar::find_path_with_exact_length(
     const ReservationTable& rt_ = *rt;
 
     int graph_size = graph->size();
-    double pause_action_cost = graph->get_pause_action_cost();
     int terminal_time = start_time + length;
 
     typedef pair<double, Node*> key;
@@ -222,7 +220,7 @@ Path SpaceTimeAStar::find_path_with_exact_length(
             continue;
 
         if (!rt_.is_reserved(time + 1, current->node_id))
-            process_node(current->node_id, pause_action_cost, current);
+            process_node(current->node_id, graph->get_pause_action_cost(current->node_id), current);
 
         auto reserved_edges = rt_.get_reserved_edges(time, current->node_id);
         for (auto &[node_id, cost] : graph->get_neighbors(current->node_id)) {
@@ -265,7 +263,6 @@ Path SpaceTimeAStar::find_path_with_length_limit(
     const ReservationTable& rt_ = *rt;
 
     int graph_size = graph->size();
-    double pause_action_cost = graph->get_pause_action_cost();
     int terminal_time = start_time + max_length;
 
     typedef pair<double, Node*> key;
@@ -311,7 +308,7 @@ Path SpaceTimeAStar::find_path_with_length_limit(
             continue;
 
         if (!rt_.is_reserved(time + 1, current->node_id))
-            process_node(current->node_id, pause_action_cost, current);
+            process_node(current->node_id, graph->get_pause_action_cost(current->node_id), current);
 
         auto reserved_edges = rt_.get_reserved_edges(time, current->node_id);
         for (auto &[node_id, cost] : graph->get_neighbors(current->node_id)) {

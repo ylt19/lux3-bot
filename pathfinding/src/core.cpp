@@ -5,8 +5,6 @@ double AbsGraph::calculate_cost(Path& path) {
     if (path.size() <= 1)
         return 0;
 
-    double pause_action_cost = get_pause_action_cost();
-
     double total_cost = 0;
 
     int node_id = path[0];
@@ -24,6 +22,7 @@ double AbsGraph::calculate_cost(Path& path) {
         }
 
         if (next_node_id == node_id) {
+            double pause_action_cost = get_pause_action_cost(node_id);
             if (step_cost == -1 || pause_action_cost < step_cost)
                 step_cost = pause_action_cost;
         }

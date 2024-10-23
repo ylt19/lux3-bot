@@ -352,6 +352,28 @@ cdef class _AbsGrid(_AbsGraph):
 
         return create_matrix(data, shape)
 
+    @property
+    def pause_action_cost(self):
+        if self._basegridobj.get_pause_action_cost_type() == 1:
+            return "node.weight"
+        else:
+            return self._basegridobj.get_pause_action_cost()
+
+    @pause_action_cost.setter
+    def pause_action_cost(self, cost):
+        if isinstance(cost, str):
+            if cost == "node.weight":
+                self._basegridobj.set_pause_action_cost_type(1)
+                return
+            else:
+                raise ValueError("pause_action_cost must be double or equal to 'node.weight'")
+
+        if cost < 0:
+            raise ValueError("pause_action_cost must be non-negative.")
+
+        self._basegridobj.set_pause_action_cost_type(0)
+        self._basegridobj.set_pause_action_cost(cost)
+
 
 cdef class Grid(_AbsGrid):
     cdef cdefs.Grid* _obj
@@ -367,6 +389,7 @@ cdef class Grid(_AbsGrid):
         bool passable_left_right_border=False,
         bool passable_up_down_border=False,
         double diagonal_movement_cost_multiplier=1,
+        pause_action_cost=1,
         **kwargs,
     ):
 
@@ -404,6 +427,9 @@ cdef class Grid(_AbsGrid):
 
         if diagonal_movement_cost_multiplier != 1:
             self.diagonal_movement_cost_multiplier = diagonal_movement_cost_multiplier
+
+        if pause_action_cost != 1:
+            self.pause_action_cost = pause_action_cost
 
         self._base_init(**kwargs)
 

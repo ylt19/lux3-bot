@@ -33,6 +33,8 @@ cdef extern from "src/include/core.h":
         void update_weight(int, double) except +
         double get_weight(int) except +
         vector[double] get_weights()
+        int get_pause_action_cost_type()
+        void set_pause_action_cost_type(int) except +
 
     cdef cppclass AbsPathFinder:
         AbsPathFinder() except +
