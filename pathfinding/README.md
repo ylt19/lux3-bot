@@ -5,7 +5,9 @@ This directory contains code that has been copied from [w9PcJLyb/pathfinding](ht
 ### Modifications
 The following changes have been made to the copied code:
 
-- **Variable pause action cost**.
+- Remove unused data structures and algorithms (HexGrid, Grid3D, MAPF, some pathfinding algorithms)
+- Add reservation_table support in the animate_grid function to visualize dynamic obstacles
+- Add variable pause action cost.
 
     In the original repository, the pause_action_cost was constant across all nodes.
 Here i’ve added a new option: the pause action cost can be set to be equal to the weight of the node.

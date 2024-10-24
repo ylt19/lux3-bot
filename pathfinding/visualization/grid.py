@@ -2,7 +2,7 @@ import copy
 from matplotlib import animation, colors, pyplot as plt, patheffects as pe
 from matplotlib.patches import Circle, Rectangle
 
-from pathfinding import Grid
+from pathfinding import Grid, ReservationTable
 
 
 class GridVisualizer:
@@ -18,11 +18,19 @@ class GridVisualizer:
     agents_colormap = plt.colormaps["Set3"]
     weights_colormap = plt.colormaps["Oranges"]
 
-    def __init__(self, grid, agents=None, show_grid=True, show_weights=False) -> None:
+    def __init__(
+        self,
+        grid,
+        agents=None,
+        show_grid=True,
+        show_weights=False,
+        reservation_table=None,
+    ) -> None:
         self.grid = grid
         self.agents = self._init_agents(agents)
         self.show_grid = show_grid
         self.show_weights = show_weights
+        self.reservation_table = reservation_table
 
         weight_list = sum(grid.weights, [])
         self.max_weight = max(weight_list)
@@ -49,10 +57,10 @@ class GridVisualizer:
         norm = colors.Normalize(vmin=0, vmax=self.max_weight)
         return self.weights_colormap(norm(weight))
 
-    def _draw_node(self, ax, x, y, weight):
+    def _draw_node(self, ax, x, y):
         colors = {}
 
-        face_color = self._get_node_color(weight)
+        face_color = self._get_node_color(self.grid.get_weight((x, y)))
         if face_color:
             colors["facecolor"] = face_color
 
@@ -71,10 +79,9 @@ class GridVisualizer:
         ax.add_patch(patch)
 
     def _draw_map(self, ax):
-        weights = self.grid.weights
         for x in range(self.grid.width):
             for y in range(self.grid.height):
-                self._draw_node(ax, x, y, weights[y][x])
+                self._draw_node(ax, x, y)
 
     def _plot_range(self):
         return -0.5, -0.5, self.grid.width - 0.5, self.grid.height - 0.5
@@ -239,6 +246,22 @@ class GridVisualizer:
         agents = self.agents
 
         plot_objects = []
+
+        nodes = []
+        if self.reservation_table:
+            for x in range(self.grid.width):
+                for y in range(self.grid.height):
+                    patch = Rectangle(
+                        xy=(x - 0.4, y - 0.4),
+                        width=0.8,
+                        height=0.8,
+                        zorder=self.node_zorder,
+                        facecolor=self.obstacle_color,
+                        alpha=0,
+                    )
+                    nodes.append({"point": (x, y), "patch": patch})
+                    plot_objects.append(patch)
+
         for agent in agents:
             color = agent["color"]
 
@@ -259,16 +282,23 @@ class GridVisualizer:
                     agent["text"] = text
 
         def init_func():
+            for node in nodes:
+                ax.add_patch(node["patch"])
+
             for agent in agents:
                 if "patch" in agent:
                     ax.add_patch(agent["patch"])
                 if "text" in agent:
                     ax.add_artist(agent["text"])
-
             return plot_objects
 
         def animate(step):
             time = step / 10
+
+            if self.reservation_table and int(time) == time:
+                for node in nodes:
+                    alpha = self.reservation_table.is_reserved(time, node["point"])
+                    node["patch"].set_alpha(alpha)
 
             for agent in agents:
                 patch = agent.get("patch")
@@ -322,8 +352,19 @@ def plot_grid(grid, agents=None, show_grid=True, show_weights=False, **kwargs):
     ).plot(**kwargs)
 
 
-def animate_grid(grid, agents=None, show_grid=True, show_weights=False, **kwargs):
+def animate_grid(
+    grid,
+    agents=None,
+    show_grid=True,
+    show_weights=False,
+    reservation_table=None,
+    **kwargs
+):
     visualizer = get_visualizer(grid)
     return visualizer(
-        grid, agents, show_grid=show_grid, show_weights=show_weights
+        grid,
+        agents,
+        show_grid=show_grid,
+        show_weights=show_weights,
+        reservation_table=reservation_table,
     ).animate(**kwargs)
