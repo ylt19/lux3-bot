@@ -20,7 +20,7 @@ def gather_energy(state: State):
     if not targets:
         return
 
-    finder = PathFinder(state.space)
+    finder = PathFinder(state)
 
     for ship in state.fleet:
         if ship.task and not isinstance(ship.task, GatherEnergy):
@@ -34,7 +34,7 @@ def gather_energy(state: State):
             ship.task = None
             continue
 
-        path = finder.find_path(ship.coordinates, target)
+        path = finder.find_path(ship.coordinates, target, dynamic=True)
         energy = estimate_energy_cost(state.space, path)
 
         if ship.energy >= energy:

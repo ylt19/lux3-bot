@@ -1,9 +1,10 @@
 import numpy as np
 from sys import stderr as err
 from enum import IntEnum
-from pathfinding import Grid, AStar, ResumableDijkstra
+from functools import cached_property
+from pathfinding import Grid, AStar, SpaceTimeAStar, ResumableDijkstra, ReservationTable
 
-from .base import Params, is_inside
+from .base import Params, is_inside, warp_point
 from .space import Space, NodeType
 
 DIRECTIONS = [
@@ -113,36 +114,77 @@ def allowed_movements(x, y, space):
 
 
 class PathFinder:
-    def __init__(self, space, algorithm=AStar):
-        self._grid = None
-        self._finder = None
-        self._space = space
-        self._algorithm = algorithm
-        self._components = None
+    def __init__(self, state, space=None):
+        self._state = state
+        self._space = space or state.space
 
-    @property
+    @cached_property
     def grid(self):
-        if self._grid is None:
-            self._grid = self._create_grid()
-        return self._grid
+        return self._create_grid()
 
-    @property
-    def finder(self):
-        if self._finder is None:
-            self._finder = self._algorithm(self.grid)
-        return self._finder
+    @cached_property
+    def grid_without_obstacles(self):
+        return self._create_grid(without_obstacles=True)
 
-    def find_path(self, start, goal):
-        return self.finder.find_path(start, goal)
+    @cached_property
+    def a_star(self):
+        return AStar(self.grid)
+
+    @cached_property
+    def space_time_a_star(self):
+        return SpaceTimeAStar(self.grid_without_obstacles)
+
+    @cached_property
+    def reservation_table(self):
+        assert (
+            Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
+            and Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
+        )
+
+        shift = Params.OBSTACLE_MOVEMENT_DIRECTION
+
+        rt = ReservationTable(self.grid_without_obstacles)
+        for node in self._space:
+            if node.type == NodeType.asteroid:
+                point = node.coordinates
+                path = []
+                _match_step = self._state.match_step
+                _global_step = self._state.global_step
+                while _match_step <= Params.MAX_STEPS_IN_MATCH:
+                    if (_global_step - 1) % Params.OBSTACLE_MOVEMENT_PERIOD == 0:
+                        point = warp_point(point[0] + shift[0], point[1] + shift[1])
+                    path.append(point)
+                    _match_step += 1
+                    _global_step += 1
+
+                rt.add_path(path, reserve_destination=False)
+
+        return rt
+
+    def find_path(self, start, goal, dynamic=False):
+        if (
+            not dynamic
+            or not Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
+            or not Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
+        ):
+            return self.a_star.find_path(start, goal)
+
+        path = self.space_time_a_star.find_path_with_length_limit(
+            start,
+            goal,
+            max_length=self._state.steps_left_in_match(),
+            reservation_table=self.reservation_table,
+        )
+        return path
 
     def cost(self, path):
         return self.grid.calculate_cost(path)
 
-    def _create_grid(self):
+    def _create_grid(self, without_obstacles=False):
         weights = np.zeros((Params.SPACE_SIZE, Params.SPACE_SIZE), np.int16)
         for node in self._space:
 
-            if not node.is_walkable:
+            if not without_obstacles and not node.is_walkable:
                 w = -1
             else:
                 node_energy = node.energy
@@ -156,7 +198,7 @@ class PathFinder:
 
             weights[node.y][node.x] = w
 
-        return Grid(weights)
+        return Grid(weights, pause_action_cost="node.weight")
 
     def get_resumable_search(self, start):
         return ResumableDijkstra(self.grid, start)
@@ -176,12 +218,9 @@ class PathFinder:
 
         return target, min_distance
 
-    @property
+    @cached_property
     def components(self):
-        if self._components is None:
-            self._components = self.grid.find_components()
-            self._components = [set(x) for x in self._components]
-        return self._components
+        return [set(x) for x in self.grid.find_components()]
 
     def get_available_locations(self, coordinates):
         for component in self.components:

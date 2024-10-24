@@ -8,7 +8,7 @@ def harvest(state):
     space = state.space
     fleet = state.fleet
 
-    finder = PathFinder(state.space)
+    finder = PathFinder(state)
 
     booked_nodes = set()
     for ship in fleet:
@@ -45,7 +45,7 @@ def set_path_to_target(state, ship, target, finder) -> bool:
     if not ship.can_move():
         return False
 
-    path = finder.find_path(ship.coordinates, target)
+    path = finder.find_path(ship.coordinates, target, dynamic=True)
     energy = estimate_energy_cost(state.space, path)
 
     if ship.energy < energy:
