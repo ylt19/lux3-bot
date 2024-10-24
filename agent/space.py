@@ -216,6 +216,8 @@ class Space:
                 obstacles_shifted = False
             else:
                 print("WARNING: Can't find OBSTACLE_MOVEMENT_DIRECTION", file=err)
+                for node in self:
+                    node.type = NodeType.unknown
 
         if (
             obstacles_shifted
@@ -396,6 +398,7 @@ def _get_obstacle_movement_direction(space, obs):
     sensor_mask = obs["sensor_mask"]
     obs_tile_type = obs["map_features"]["tile_type"]
 
+    suitable_directions = []
     for direction in [(1, -1), (-1, 1)]:
         moved_space = space.move(*direction, inplace=False)
 
@@ -411,7 +414,10 @@ def _get_obstacle_movement_direction(space, obs):
                 break
 
         if match:
-            return direction
+            suitable_directions.append(direction)
+
+    if len(suitable_directions) == 1:
+        return suitable_directions[0]
 
 
 def _get_obstacle_movement_period(obstacles_movement_status):
