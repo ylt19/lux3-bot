@@ -45,7 +45,7 @@ class Agent:
         harvest(self.state)
         gather_energy(self.state)
 
-        # self.state.show_tasks()
+        # self.state.show_tasks(show_path=False)
 
         self.previous_state = self.state.copy()
         return self.state.create_actions_array()

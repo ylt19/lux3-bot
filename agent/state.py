@@ -132,10 +132,13 @@ class State:
         print("Exploration info:", file=err)
         show_exploration_info(self.space)
 
-    def show_tasks(self):
+    def show_tasks(self, show_path=False):
         print("Tasks:", file=err)
         for ship in self.fleet:
-            print(f" - {ship} : {ship.task}", file=err)
+            m = f" - {ship} : {ship.task}"
+            if path:
+                m += f", {ship.path()}"
+            print(m, file=err)
 
     def to_animation(self, file_name=None):
         if not file_name:

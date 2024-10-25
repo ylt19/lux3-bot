@@ -172,6 +172,23 @@ class PathFinder:
 
                 rt.add_path(path, reserve_destination=False)
 
+            elif node.type == NodeType.nebula and Params.NEBULA_ENERGY_REDUCTION != 0:
+                point = node.coordinates
+                path = []
+                _match_step = self._state.match_step
+                _global_step = self._state.global_step
+                while _match_step <= Params.MAX_STEPS_IN_MATCH:
+                    if (
+                        len(path) > 1
+                        and (_global_step - 2) % Params.OBSTACLE_MOVEMENT_PERIOD == 0
+                    ):
+                        point = warp_point(point[0] + shift[0], point[1] + shift[1])
+                    path.append(point)
+                    _match_step += 1
+                    _global_step += 1
+
+                rt.add_weight_path(path, weight=Params.NEBULA_ENERGY_REDUCTION)
+
         return rt
 
     def find_path(self, start, goal, dynamic=False):
@@ -206,7 +223,7 @@ class PathFinder:
 
                 w = Params.MAX_ENERGY_PER_TILE + 1 - node_energy
 
-            if node.type == NodeType.nebula:
+            if not without_obstacles and node.type == NodeType.nebula:
                 w += Params.NEBULA_ENERGY_REDUCTION
 
             weights[node.y][node.x] = w
