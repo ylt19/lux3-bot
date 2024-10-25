@@ -151,7 +151,11 @@ class PathFinder:
                 _match_step = self._state.match_step
                 _global_step = self._state.global_step
                 while _match_step <= Params.MAX_STEPS_IN_MATCH:
-                    if (_global_step - 1) % Params.OBSTACLE_MOVEMENT_PERIOD == 0:
+                    if (
+                        len(path) > 0
+                        and (_global_step - 1) % Params.OBSTACLE_MOVEMENT_PERIOD == 0
+                    ):
+                        rt.add_vertex_constraint(point, len(path))
                         point = warp_point(point[0] + shift[0], point[1] + shift[1])
                     path.append(point)
                     _match_step += 1
