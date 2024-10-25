@@ -129,8 +129,38 @@ void ReservationTable::print() const {
             cout << "- time=" << time << ", node=" << node_id << endl;
         }
     }
+
+    if (!additional_weights_.empty()) {
+        cout << "Variable weights:" << endl;
+        for (auto &[st, w] : additional_weights_) {
+            int time = st / graph_size;
+            int node_id = st % graph_size;
+            cout << "- time=" << time << ", node=" << node_id << ", weight=" << w << endl;
+        }
+    }
 }
 
 bool ReservationTable::empty() const {
-    return vertex_constraints_.empty() && edge_constraints_.empty() && semi_static_constraints_.empty();
+    return (
+        vertex_constraints_.empty()
+        && edge_constraints_.empty()
+        && semi_static_constraints_.empty()
+        && additional_weights_.empty()
+    );
+}
+
+void ReservationTable::add_additional_weight(int time, int node_id, double weight) {
+    additional_weights_[st(time, node_id)] += weight;
+}
+
+void ReservationTable::add_weight_path(int start_time, vector<int> &path, double weight) {
+    for (size_t i = 0; i < path.size(); i++)
+        additional_weights_[st(start_time + i, path[i])] += weight;
+}
+
+double ReservationTable::get_additional_weight(int time, int node_id) const {
+    int st_ = st(time, node_id);
+    if (additional_weights_.count(st_))
+        return additional_weights_.at(st_);
+    return 0;
 }

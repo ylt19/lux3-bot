@@ -56,6 +56,9 @@ cdef extern from "src/include/reservation_table.h":
         void add_path(int, vector[int], bool, bool)
         void add_vertex_constraint(int, int)
         void add_edge_constraint(int, int, int)
+        void add_additional_weight(int, int, double)
+        void add_weight_path(int, vector[int], double)
+        double get_additional_weight(int, int)
         int last_time_reserved(int)
 
 

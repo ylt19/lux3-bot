@@ -28,6 +28,9 @@ class ReservationTable {
         int last_time_reserved(int node_id) const;
         void print() const;
         bool empty() const;
+        void add_additional_weight(int time, int node_id, double weight);
+        void add_weight_path(int start_time, vector<int> &path, double weight);
+        double get_additional_weight(int time, int node_id) const;
 
     private:
         int max_time_ = 0;
@@ -43,6 +46,10 @@ class ReservationTable {
         // edges in space-time reserved by other agents
         // (time, node_id) -> {node_id, ...}
         std::unordered_map<int, std::unordered_set<int>> edge_constraints_;
+
+        // nodes in space-time with additional weight
+        // (time, node_id) -> weight
+        std::unordered_map<int, double> additional_weights_;
 
         int st(int time, int node_id) const {
             return time * graph_size + node_id;

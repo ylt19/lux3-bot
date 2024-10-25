@@ -133,3 +133,17 @@ class TestSpaceTimeAStar(unittest.TestCase):
         grid.pause_action_cost = "node.weight"
         path = a.find_path((0, 1), (2, 1), reservation_table=rt)
         self.assertListEqual(path, [(0, 1), (0, 2), (0, 2), (0, 1), (1, 1), (2, 1)])
+
+    def test_with_moving_weights(self):
+        grid = Grid(height=4, width=4)
+
+        rt = ReservationTable(grid)
+
+        a = SpaceTimeAStar(grid)
+
+        path = a.find_path((0, 0), (3, 0), reservation_table=rt)
+        self.assertListEqual(path, [(0, 0), (1, 0), (2, 0), (3, 0)])
+
+        rt.add_weight_path([(1, 0), (1, 0), (1, 0), (2, 0), (2, 0)], weight=3)
+        path = a.find_path((0, 0), (3, 0), reservation_table=rt)
+        self.assertListEqual(path, [(0, 0), (0, 1), (1, 1), (2, 1), (3, 1), (3, 0)])

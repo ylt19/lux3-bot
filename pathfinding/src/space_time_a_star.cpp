@@ -100,7 +100,7 @@ Path SpaceTimeAStar::find_path_with_depth_limit(
         if (h == -1)
             return false;
 
-        double distance = current->distance + cost;
+        double distance = current->distance + cost + rt->get_additional_weight(time, node_id);
 
         int st = node_id + time * graph_size;
         if (!nodes.count(st)) {
@@ -187,7 +187,7 @@ Path SpaceTimeAStar::find_path_with_exact_length(
     auto process_node = [&] (int node_id, double cost, Node* current) {
         int time = current->time + 1;
         double h = graph->estimate_distance(node_id, goal);
-        double distance = current->distance + cost;
+        double distance = current->distance + cost + rt->get_additional_weight(time, node_id);
 
         int st = node_id + time * graph_size;
         if (!nodes.count(st)) {
@@ -275,7 +275,7 @@ Path SpaceTimeAStar::find_path_with_length_limit(
     auto process_node = [&] (int node_id, double cost, Node* current) {
         int time = current->time + 1;
         double h = rrs_.distance(node_id);
-        double distance = current->distance + cost;
+        double distance = current->distance + cost + rt->get_additional_weight(time, node_id);
 
         int st = node_id + time * graph_size;
         if (!nodes.count(st)) {
