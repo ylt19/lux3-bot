@@ -257,6 +257,7 @@ class GridVisualizer:
                         height=0.8,
                         zorder=self.node_zorder,
                         facecolor=self.obstacle_color,
+                        edgecolor=self.grid_color,
                         alpha=0,
                     )
                     nodes.append({"point": (x, y), "patch": patch})
@@ -295,10 +296,25 @@ class GridVisualizer:
         def animate(step):
             time = step / 10
 
-            if self.reservation_table and int(time) == time:
+            if self.reservation_table and (time == 0 or time == int(time) + 0.5):
+                int_time = int(time) + 1 if time > 0 else 0
                 for node in nodes:
-                    alpha = self.reservation_table.is_reserved(time, node["point"])
-                    node["patch"].set_alpha(alpha)
+                    point = node["point"]
+                    is_reserved = self.reservation_table.is_reserved(int_time, point)
+                    additional_weight = self.reservation_table.get_additional_weight(
+                        int_time, point
+                    )
+
+                    if is_reserved:
+                        node["patch"].set_alpha(1)
+                        node["patch"].set_facecolor(self.obstacle_color)
+                    elif additional_weight:
+                        node["patch"].set_alpha(1)
+                        norm = colors.Normalize(vmin=0, vmax=self.max_weight)
+                        weight_color = self.weights_colormap(norm(additional_weight))
+                        node["patch"].set_facecolor(weight_color)
+                    else:
+                        node["patch"].set_alpha(0)
 
             for agent in agents:
                 patch = agent.get("patch")
