@@ -2,7 +2,7 @@ import numpy as np
 from sys import stderr as err
 
 from .base import Params
-from .path import Action, apply_action
+from .path import Action, apply_action, actions_to_path
 from .space import Node, Space
 
 
@@ -74,6 +74,11 @@ class Ship:
     @property
     def coordinates(self):
         return self.node.coordinates if self.node else None
+
+    def path(self):
+        if not self.action_queue:
+            return [self.coordinates]
+        return actions_to_path(self.coordinates, self.action_queue)
 
     def clear(self):
         self.energy = 0

@@ -82,6 +82,15 @@ def path_to_actions(path):
     return actions
 
 
+def actions_to_path(start, actions):
+    p = start
+    path = [p]
+    for a in actions:
+        p = apply_action(*p, action=a.type)
+        path.append(p)
+    return path
+
+
 def estimate_energy_cost(space: Space, path: list[tuple[int, int]]):
     if len(path) <= 1:
         return 0

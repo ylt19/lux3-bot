@@ -2,9 +2,10 @@ import copy
 import numpy as np
 from sys import stderr as err
 from collections import defaultdict
+from pathfinding.visualization import animate_grid
 
 from .base import Params, get_spawn_location, chebyshev_distance
-from .path import ActionType
+from .path import ActionType, PathFinder
 from .space import Space, NodeType
 from .fleet import Fleet
 
@@ -135,6 +136,25 @@ class State:
         print("Tasks:", file=err)
         for ship in self.fleet:
             print(f" - {ship} : {ship.task}", file=err)
+
+    def to_animation(self, file_name=None):
+        if not file_name:
+            file_name = f"step_{self.global_step}.mp4"
+        finder = PathFinder(self)
+        agents = []
+        for ship in self.fleet:
+            agents.append(
+                {"id": ship.unit_id, "start": ship.coordinates, "path": ship.path()}
+            )
+
+        anim = animate_grid(
+            finder.grid_without_obstacles,
+            agents=agents,
+            reservation_table=finder.reservation_table,
+            show_weights=True,
+            size=8,
+        )
+        anim.save(file_name)
 
 
 def show_map(space, my_fleet=None, opp_fleet=None, only_visible=True):
