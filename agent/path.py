@@ -1,7 +1,5 @@
-import numpy as np
 from sys import stderr as err
 from enum import IntEnum
-from functools import cached_property
 from pathfinding import Grid, AStar, SpaceTimeAStar, ResumableDijkstra, ReservationTable
 
 from .base import Params, is_inside, warp_point, nearby_positions, manhattan_distance
@@ -151,7 +149,6 @@ def create_reservation_table(state, grid, ship_energy=None):
 
 
 def _add_opp_ships(rt, state, ship_energy):
-    print(f"add opp ships to rt, ship_energy = {ship_energy}", file=err)
     for opp_ship in state.opp_fleet:
         if opp_ship.energy < ship_energy:
             continue
@@ -159,7 +156,6 @@ def _add_opp_ships(rt, state, ship_energy):
         opp_coord = opp_ship.coordinates
         for p in nearby_positions(*opp_coord, distance=2):
             if manhattan_distance(p, opp_coord) <= 2:
-                print(f"add opp {opp_ship}, point = {p}", file=err)
                 rt.add_vertex_constraint(p, time=1)
 
 
