@@ -198,7 +198,7 @@ class Space:
                 Params.OBSTACLE_MOVEMENT_PERIOD_FOUND = True
                 Params.OBSTACLE_MOVEMENT_PERIOD = period
                 print(
-                    f"Find param OBSTACLE_MOVEMENT_PERIOD_FOUND = {period}",
+                    f"Find param OBSTACLE_MOVEMENT_PERIOD = {period}",
                     file=err,
                 )
 

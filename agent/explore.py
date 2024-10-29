@@ -1,7 +1,12 @@
 from sys import stderr as err
 
 from .base import Params, is_team_sector, nearby_positions
-from .path import PathFinder, path_to_actions, estimate_energy_cost
+from .path import (
+    path_to_actions,
+    estimate_energy_cost,
+    find_path_in_dynamic_environment,
+    find_closest_target,
+)
 from .space import Node, NodeType
 from .tasks import FindRelicNodes, FindRewardNodes, GatherEnergy
 
@@ -27,8 +32,6 @@ def find_relics(state):
         ):
             targets.add(node.coordinates)
 
-    finder = PathFinder(state)
-
     for ship in fleet:
         if ship.task and not isinstance(ship.task, (FindRelicNodes, GatherEnergy)):
             continue
@@ -37,12 +40,14 @@ def find_relics(state):
             ship.task = None
             continue
 
-        target, _ = finder.find_closest_target(ship.coordinates, targets)
+        target, _ = find_closest_target(state, ship.coordinates, targets)
         if not target:
             ship.task = None
             continue
 
-        path = finder.find_path(ship.coordinates, target, dynamic=True)
+        path = find_path_in_dynamic_environment(
+            state, start=ship.coordinates, goal=target, ship_energy=ship.energy
+        )
         energy = estimate_energy_cost(state.space, path)
 
         if ship.energy >= energy:
@@ -80,11 +85,9 @@ def find_rewards(state):
 
         relic_node_to_ship[relic_node] = ship
 
-    finder = PathFinder(state)
-
     for relic in relic_nodes:
         if relic not in relic_node_to_ship:
-            ship = find_ship_for_reward_task(space, fleet, relic, finder)
+            ship = find_ship_for_reward_task(state, relic)
             if ship:
                 relic_node_to_ship[relic] = ship
 
@@ -101,13 +104,14 @@ def find_rewards(state):
             if not node.explored_for_reward:
                 targets.append((x, y))
 
-        target, _ = finder.find_closest_target(ship.coordinates, targets)
+        target, _ = find_closest_target(state, ship.coordinates, targets)
 
         if target == ship.coordinates:
             if not pause_action:
                 pause_action = True
             else:
-                target, _ = finder.find_closest_target(
+                target, _ = find_closest_target(
+                    state,
                     ship.coordinates,
                     targets=[n.coordinates for n in space if n.explored_for_reward],
                 )
@@ -115,7 +119,9 @@ def find_rewards(state):
         if not target:
             continue
 
-        path = finder.find_path(ship.coordinates, target, dynamic=True)
+        path = find_path_in_dynamic_environment(
+            state, start=ship.coordinates, goal=target, ship_energy=ship.energy
+        )
         energy = estimate_energy_cost(state.space, path)
         if ship.energy >= energy:
             ship.action_queue = path_to_actions(path)
@@ -148,9 +154,9 @@ def get_unexplored_relics(space, team_id) -> list[Node]:
     return relic_nodes
 
 
-def find_ship_for_reward_task(space, fleet, relic_node, finder):
+def find_ship_for_reward_task(state, relic_node):
     free_ships = []
-    for ship in fleet:
+    for ship in state.fleet:
         if isinstance(ship.task, FindRewardNodes):
             continue
         if ship.energy < Params.UNIT_MOVE_COST * 10:
@@ -162,13 +168,13 @@ def find_ship_for_reward_task(space, fleet, relic_node, finder):
 
     unexplored = []
     for x, y in nearby_positions(*relic_node.coordinates, Params.RELIC_REWARD_RANGE):
-        node = space.get_node(x, y)
+        node = state.space.get_node(x, y)
         if not node.explored_for_reward:
             unexplored.append((x, y))
 
     closest_ship, min_distance = None, float("inf")
     for ship in free_ships:
-        _, distance = finder.find_closest_target(ship.coordinates, unexplored)
+        _, distance = find_closest_target(state, ship.coordinates, unexplored)
         if distance < min_distance:
             closest_ship, min_distance = ship, distance
 

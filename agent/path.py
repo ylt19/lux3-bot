@@ -4,7 +4,7 @@ from enum import IntEnum
 from functools import cached_property
 from pathfinding import Grid, AStar, SpaceTimeAStar, ResumableDijkstra, ReservationTable
 
-from .base import Params, is_inside, warp_point
+from .base import Params, is_inside, warp_point, nearby_positions, manhattan_distance
 from .space import Space, NodeType
 
 DIRECTIONS = [
@@ -122,138 +122,99 @@ def allowed_movements(x, y, space):
     return actions
 
 
-class PathFinder:
-    def __init__(self, state, space=None):
-        self._state = state
-        self._space = space or state.space
+def find_path_in_dynamic_environment(state, start, goal, ship_energy=None):
+    grid = state.energy_grid
+    reservation_table = create_reservation_table(state, grid, ship_energy)
+    finder = SpaceTimeAStar(grid)
+    path = finder.find_path_with_length_limit(
+        start,
+        goal,
+        max_length=state.steps_left_in_match(),
+        reservation_table=reservation_table,
+    )
+    return path
 
-    @cached_property
-    def grid(self):
-        return self._create_grid()
 
-    @cached_property
-    def grid_without_obstacles(self):
-        return self._create_grid(without_obstacles=True)
+def create_reservation_table(state, grid, ship_energy=None):
+    rt = ReservationTable(grid)
 
-    @cached_property
-    def a_star(self):
-        return AStar(self.grid)
+    if ship_energy is not None:
+        _add_opp_ships(rt, state, ship_energy)
 
-    @cached_property
-    def space_time_a_star(self):
-        return SpaceTimeAStar(self.grid_without_obstacles)
+    if (
+        Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
+        and Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
+    ):
+        _add_dynamic_environment(rt, state)
 
-    @cached_property
-    def reservation_table(self):
-        assert (
-            Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
-            and Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
-        )
+    return rt
 
-        shift = Params.OBSTACLE_MOVEMENT_DIRECTION
 
-        rt = ReservationTable(self.grid_without_obstacles)
-        for node in self._space:
-            if node.type == NodeType.asteroid:
-                point = node.coordinates
-                path = []
-                _match_step = self._state.match_step
-                _global_step = self._state.global_step
-                while _match_step <= Params.MAX_STEPS_IN_MATCH:
-                    if (
-                        len(path) > 0
-                        and (_global_step - 1) % Params.OBSTACLE_MOVEMENT_PERIOD == 0
-                    ):
-                        rt.add_vertex_constraint(point, len(path))
-                        point = warp_point(point[0] + shift[0], point[1] + shift[1])
-                    path.append(point)
-                    _match_step += 1
-                    _global_step += 1
+def _add_opp_ships(rt, state, ship_energy):
+    print(f"add opp ships to rt, ship_energy = {ship_energy}", file=err)
+    for opp_ship in state.opp_fleet:
+        if opp_ship.energy < ship_energy:
+            continue
 
-                rt.add_path(path, reserve_destination=False)
+        opp_coord = opp_ship.coordinates
+        for p in nearby_positions(*opp_coord, distance=2):
+            if manhattan_distance(p, opp_coord) <= 2:
+                print(f"add opp {opp_ship}, point = {p}", file=err)
+                rt.add_vertex_constraint(p, time=1)
 
-            elif node.type == NodeType.nebula and Params.NEBULA_ENERGY_REDUCTION != 0:
-                point = node.coordinates
-                path = []
-                _match_step = self._state.match_step
-                _global_step = self._state.global_step
-                while _match_step <= Params.MAX_STEPS_IN_MATCH:
-                    if (
-                        len(path) > 1
-                        and (_global_step - 2) % Params.OBSTACLE_MOVEMENT_PERIOD == 0
-                    ):
-                        point = warp_point(point[0] + shift[0], point[1] + shift[1])
-                    path.append(point)
-                    _match_step += 1
-                    _global_step += 1
 
-                rt.add_weight_path(path, weight=Params.NEBULA_ENERGY_REDUCTION)
+def _add_dynamic_environment(rt, state):
+    shift = Params.OBSTACLE_MOVEMENT_DIRECTION
 
-        return rt
+    for node in state.space:
+        if node.type == NodeType.asteroid:
+            point = node.coordinates
+            path = []
+            match_step = state.match_step
+            global_step = state.global_step
+            while match_step <= Params.MAX_STEPS_IN_MATCH:
+                if (
+                    len(path) > 0
+                    and (global_step - 1) % Params.OBSTACLE_MOVEMENT_PERIOD == 0
+                ):
+                    rt.add_vertex_constraint(point, len(path))
+                    point = warp_point(point[0] + shift[0], point[1] + shift[1])
+                path.append(point)
+                match_step += 1
+                global_step += 1
 
-    def find_path(self, start, goal, dynamic=False):
-        if (
-            not dynamic
-            or not Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
-            or not Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
-        ):
-            return self.a_star.find_path(start, goal)
+            rt.add_path(path, reserve_destination=False)
 
-        path = self.space_time_a_star.find_path_with_length_limit(
-            start,
-            goal,
-            max_length=self._state.steps_left_in_match(),
-            reservation_table=self.reservation_table,
-        )
-        return path
+        elif node.type == NodeType.nebula and Params.NEBULA_ENERGY_REDUCTION != 0:
+            point = node.coordinates
+            path = []
+            match_step = state.match_step
+            global_step = state.global_step
+            while match_step <= Params.MAX_STEPS_IN_MATCH:
+                if (
+                    len(path) > 1
+                    and (global_step - 2) % Params.OBSTACLE_MOVEMENT_PERIOD == 0
+                ):
+                    point = warp_point(point[0] + shift[0], point[1] + shift[1])
+                path.append(point)
+                match_step += 1
+                global_step += 1
 
-    def cost(self, path):
-        return self.grid.calculate_cost(path)
+            rt.add_weight_path(path, weight=Params.NEBULA_ENERGY_REDUCTION)
 
-    def _create_grid(self, without_obstacles=False):
-        weights = np.zeros((Params.SPACE_SIZE, Params.SPACE_SIZE), np.int16)
-        for node in self._space:
+    return rt
 
-            if not without_obstacles and not node.is_walkable:
-                w = -1
-            else:
-                node_energy = node.energy
-                if node_energy is None:
-                    node_energy = Params.HIDDEN_NODE_ENERGY
 
-                w = Params.MAX_ENERGY_PER_TILE + 1 - node_energy
+def find_closest_target(state, start, targets):
+    if not targets:
+        return None, float("inf")
 
-            if not without_obstacles and node.type == NodeType.nebula:
-                w += Params.NEBULA_ENERGY_REDUCTION
+    rs = ResumableDijkstra(state.obstacle_grid, start)
 
-            weights[node.y][node.x] = w
+    target, min_distance = None, float("inf")
+    for t in targets:
+        d = rs.distance(t)
+        if d < min_distance:
+            target, min_distance = t, d
 
-        return Grid(weights, pause_action_cost="node.weight")
-
-    def get_resumable_search(self, start):
-        return ResumableDijkstra(self.grid, start)
-
-    def find_closest_target(self, start, targets, rs=None):
-        if not targets:
-            return None, float("inf")
-
-        if not rs:
-            rs = self.get_resumable_search(start)
-
-        target, min_distance = None, float("inf")
-        for t in targets:
-            d = rs.distance(t)
-            if d < min_distance:
-                target, min_distance = t, d
-
-        return target, min_distance
-
-    @cached_property
-    def components(self):
-        return [set(x) for x in self.grid.find_components()]
-
-    def get_available_locations(self, coordinates):
-        for component in self.components:
-            if coordinates in component:
-                return component
-        return {coordinates}
+    return target, min_distance

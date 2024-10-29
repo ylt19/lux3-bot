@@ -1,6 +1,13 @@
 from sys import stderr as err
+from collections import defaultdict
 
-from .path import PathFinder, path_to_actions, estimate_energy_cost
+from .base import manhattan_distance
+from .path import (
+    path_to_actions,
+    find_closest_target,
+    estimate_energy_cost,
+    find_path_in_dynamic_environment,
+)
 from .tasks import HarvestTask, GatherEnergy
 
 
@@ -8,13 +15,11 @@ def harvest(state):
     space = state.space
     fleet = state.fleet
 
-    finder = PathFinder(state)
-
     booked_nodes = set()
     for ship in fleet:
         if isinstance(ship.task, HarvestTask):
             target = ship.task.coordinates
-            if set_path_to_target(state, ship, target, finder):
+            if set_path_to_target(state, ship, target):
                 booked_nodes.add(state.space.get_node(*target))
             else:
                 ship.task = None
@@ -26,26 +31,39 @@ def harvest(state):
     if not targets:
         return
 
+    steps_left = state.steps_left_in_match()
     for ship in fleet:
         if ship.task and not isinstance(ship.task, GatherEnergy):
             continue
 
-        target, _ = finder.find_closest_target(ship.coordinates, targets)
+        ship_targets = [
+            x for x in targets if manhattan_distance(ship.coordinates, x) < steps_left
+        ]
+
+        target, _ = find_closest_target(state, ship.coordinates, ship_targets)
         if not target:
+            ship.task = None
             continue
 
-        if set_path_to_target(state, ship, target, finder):
+        if set_path_to_target(state, ship, target):
             targets.remove(target)
+        else:
+            ship.task = None
 
 
-def set_path_to_target(state, ship, target, finder) -> bool:
+def set_path_to_target(state, ship, target) -> bool:
     if ship.coordinates == target:
         return True
 
     if not ship.can_move():
         return False
 
-    path = finder.find_path(ship.coordinates, target, dynamic=True)
+    path = find_path_in_dynamic_environment(
+        state, start=ship.coordinates, goal=target, ship_energy=ship.energy
+    )
+    if not path:
+        return False
+
     energy = estimate_energy_cost(state.space, path)
 
     if ship.energy < energy:

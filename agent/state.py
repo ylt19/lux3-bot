@@ -2,10 +2,11 @@ import copy
 import numpy as np
 from sys import stderr as err
 from collections import defaultdict
+from pathfinding import Grid
 from pathfinding.visualization import animate_grid
 
 from .base import Params, get_spawn_location, chebyshev_distance
-from .path import ActionType, PathFinder
+from .path import ActionType, create_reservation_table
 from .space import Space, NodeType
 from .fleet import Fleet
 
@@ -31,7 +32,13 @@ class State:
 
         self._obstacles_movement_status = []
 
+        self._energy_grid = None
+        self._obstacle_grid = None
+
     def update(self, obs):
+        self._energy_grid = None
+        self._obstacle_grid = None
+
         if obs["steps"] > 0:
             self._update_step_counters()
 
@@ -136,14 +143,14 @@ class State:
         print("Tasks:", file=err)
         for ship in self.fleet:
             m = f" - {ship} : {ship.task}"
-            if path:
+            if show_path:
                 m += f", {ship.path()}"
             print(m, file=err)
 
     def to_animation(self, file_name=None):
         if not file_name:
             file_name = f"step_{self.global_step}.mp4"
-        finder = PathFinder(self)
+
         agents = []
         for ship in self.fleet:
             agents.append(
@@ -151,13 +158,61 @@ class State:
             )
 
         anim = animate_grid(
-            finder.grid_without_obstacles,
+            self.energy_grid,
             agents=agents,
-            reservation_table=finder.reservation_table,
+            reservation_table=create_reservation_table(self, self.energy_grid),
             show_weights=True,
             size=8,
         )
         anim.save(file_name)
+
+    @property
+    def energy_grid(self):
+        if self._energy_grid is None:
+            self._energy_grid = create_energy_grid(self)
+        return self._energy_grid
+
+    @property
+    def obstacle_grid(self):
+        if self._obstacle_grid is None:
+            self._obstacle_grid = create_grid_with_obstacles(self)
+        return self._obstacle_grid
+
+
+def create_energy_grid(state):
+    weights = np.zeros((Params.SPACE_SIZE, Params.SPACE_SIZE), np.int16)
+    for node in state.space:
+
+        node_energy = node.energy
+        if node_energy is None:
+            node_energy = Params.HIDDEN_NODE_ENERGY
+
+        w = Params.MAX_ENERGY_PER_TILE + 1 - node_energy
+
+        weights[node.y][node.x] = w
+
+    return Grid(weights, pause_action_cost="node.weight")
+
+
+def create_grid_with_obstacles(state):
+    weights = np.zeros((Params.SPACE_SIZE, Params.SPACE_SIZE), np.int16)
+    for node in state.space:
+
+        if not node.is_walkable:
+            w = -1
+        else:
+            node_energy = node.energy
+            if node_energy is None:
+                node_energy = Params.HIDDEN_NODE_ENERGY
+
+            w = Params.MAX_ENERGY_PER_TILE + 1 - node_energy
+
+        if node.type == NodeType.nebula:
+            w += Params.NEBULA_ENERGY_REDUCTION
+
+        weights[node.y][node.x] = w
+
+    return Grid(weights, pause_action_cost="node.weight")
 
 
 def show_map(space, my_fleet=None, opp_fleet=None, only_visible=True):
