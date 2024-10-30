@@ -1,6 +1,6 @@
 from sys import stderr as err
 
-from .base import Params, is_team_sector, nearby_positions
+from .base import Params, is_team_sector, nearby_positions, chebyshev_distance
 from .path import (
     path_to_actions,
     estimate_energy_cost,
@@ -93,6 +93,14 @@ def find_rewards(state):
 
     relic_ships = sorted(list(relic_node_to_ship.items()), key=lambda _: _[1].unit_id)
 
+    num_ship_within_relic_range = 0
+    for relic_node, ship in relic_ships:
+        if (
+            chebyshev_distance(relic_node.coordinates, ship.coordinates)
+            <= Params.RELIC_REWARD_RANGE
+        ):
+            num_ship_within_relic_range += 1
+
     pause_action = False
     for relic_node, ship in relic_ships:
 
@@ -107,7 +115,7 @@ def find_rewards(state):
         target, _ = find_closest_target(state, ship.coordinates, targets)
 
         if target == ship.coordinates:
-            if not pause_action:
+            if not pause_action and num_ship_within_relic_range > 1:
                 pause_action = True
             else:
                 target, _ = find_closest_target(
