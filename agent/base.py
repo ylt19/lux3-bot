@@ -2,6 +2,7 @@ class Params:
     # Game related constants
     MAX_UNITS = 16
     SPACE_SIZE = 24
+    MAX_UNIT_ENERGY = 400
     RELIC_REWARD_RANGE = 2
     MIN_ENERGY_PER_TILE = -20
     MAX_ENERGY_PER_TILE = 20

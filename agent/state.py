@@ -221,12 +221,14 @@ def show_map(space, my_fleet=None, opp_fleet=None, only_visible=True):
     )
 
     my_ships = defaultdict(int)
-    for ship in my_fleet or []:
-        my_ships[ship.node.coordinates] += 1
+    if my_fleet:
+        for ship in my_fleet:
+            my_ships[ship.node.coordinates] += 1
 
     opp_ships = defaultdict(int)
-    for ship in opp_fleet or []:
-        opp_ships[ship.node.coordinates] += 1
+    if opp_fleet:
+        for ship in opp_fleet.ships:
+            opp_ships[ship.node.coordinates] += 1
 
     line = " + " + " ".join([f"{x:>2}" for x in range(Params.SPACE_SIZE)]) + "  +\n"
     str_grid = line

@@ -17,7 +17,7 @@ class Fleet:
 
     def __iter__(self):
         for ship in self.ships:
-            if ship.node is not None:
+            if ship.is_visible:
                 yield ship
 
     def update(self, obs, space: Space):
@@ -32,8 +32,14 @@ class Fleet:
             if active:
                 ship.node = space.get_node(*position)
                 ship.energy = int(energy)
+                ship.steps_since_last_viewed = 0
             else:
-                ship.clear()
+                ship.steps_since_last_viewed += 1
+                if ship.energy >= 0:
+                    ship.task = None
+                    ship.action_queue = []
+                else:
+                    ship.clear()
 
             ship.action_queue = []
 
@@ -62,6 +68,7 @@ class Ship:
         self.unit_id = unit_id
         self.energy = 0
         self.node: Node | None = None
+        self.steps_since_last_viewed: int = 0
 
         self.task = None
         self.action_queue: list[Action] = []
@@ -70,6 +77,10 @@ class Ship:
         return (
             f"Ship({self.unit_id}, node={self.node.coordinates}, energy={self.energy})"
         )
+
+    @property
+    def is_visible(self) -> True:
+        return self.node is not None and self.steps_since_last_viewed == 0
 
     @property
     def coordinates(self):
@@ -85,6 +96,7 @@ class Ship:
         self.node = None
         self.task = None
         self.action_queue = []
+        self.steps_since_last_viewed = 0
 
     def can_move(self) -> bool:
         return (

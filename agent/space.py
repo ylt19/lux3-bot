@@ -116,6 +116,12 @@ class Space:
     def get_node(self, x, y) -> Node:
         return self._nodes[y][x]
 
+    def get_node_energy(self, x, y) -> int:
+        return self._nodes[y][x].energy
+
+    def get_node_type(self, x, y) -> NodeType:
+        return self._nodes[y][x].type
+
     def get_opposite_node(self, x, y) -> Node:
         return self.get_node(*get_opposite(x, y))
 
