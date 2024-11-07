@@ -2,6 +2,7 @@
 
 from libcpp cimport bool
 from libcpp.vector cimport vector
+from cython.operator cimport dereference
 from pathfinding cimport cdefs
 from pathfinding.diagonal_movement import DiagonalMovement
 
@@ -58,6 +59,9 @@ cdef class _AbsGraph:
 
     def to_dict(self):
         return {"edge_collision": self.edge_collision, "pause_action_cost": self.pause_action_cost}
+
+    def __copy__(self):
+        return self.__class__(**self.to_dict())
 
     def __reduce__(self):
         return _construct, (self.__class__, self.to_dict())
@@ -789,8 +793,10 @@ cdef class ReservationTable:
     cdef public _AbsGraph graph
 
     def __cinit__(self, _AbsGraph graph):
+        cdef int graph_size = graph.size
+
         self.graph = graph
-        self._obj = new cdefs.ReservationTable(graph.size)
+        self._obj = new cdefs.ReservationTable(graph_size)
 
     def __dealloc__(self):
         del self._obj
@@ -835,3 +841,8 @@ cdef class ReservationTable:
     def get_additional_weight(self, int time, node):
         cdef int node_id = to_node_id(self.graph, node)
         return self._obj.get_additional_weight(time, node_id)
+
+    def __copy__(self):
+        rt = ReservationTable(self.graph)
+        rt._obj = new cdefs.ReservationTable(dereference(self._obj))
+        return rt
