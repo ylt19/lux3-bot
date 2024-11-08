@@ -1,12 +1,14 @@
 import copy
+from copy import deepcopy
+
 import numpy as np
 from sys import stderr as err
 from collections import defaultdict
-from pathfinding import Grid
+from pathfinding import Grid, ReservationTable
 from pathfinding.visualization import animate_grid
 
-from .base import Params, get_spawn_location, chebyshev_distance
-from .path import ActionType, create_reservation_table
+from .base import Params, warp_point, get_spawn_location, chebyshev_distance
+from .path import ActionType
 from .space import Space, NodeType
 from .fleet import Fleet
 
@@ -34,10 +36,12 @@ class State:
 
         self._energy_grid = None
         self._obstacle_grid = None
+        self._reservation_table = None
 
     def update(self, obs):
         self._energy_grid = None
         self._obstacle_grid = None
+        self._reservation_table = None
 
         if obs["steps"] > 0:
             self._update_step_counters()
@@ -78,7 +82,17 @@ class State:
         return Params.MAX_STEPS_IN_MATCH - self.match_step
 
     def copy(self) -> "State":
-        return copy.deepcopy(self)
+        copy_state = State(self.team_id)
+
+        copy_state.global_step = 0
+        copy_state.match_step = 0
+        copy_state.match_number = 0
+
+        copy_state.space = deepcopy(self.space)
+        copy_state.fleet = deepcopy(self.fleet)
+        copy_state.opp_fleet = deepcopy(self.opp_fleet)
+
+        return copy_state
 
     def create_actions_array(self):
         ships = self.fleet.ships
@@ -160,7 +174,7 @@ class State:
         anim = animate_grid(
             self.energy_grid,
             agents=agents,
-            reservation_table=create_reservation_table(self, self.energy_grid),
+            reservation_table=self.reservation_table,
             show_weights=True,
             size=8,
         )
@@ -177,6 +191,61 @@ class State:
         if self._obstacle_grid is None:
             self._obstacle_grid = create_grid_with_obstacles(self)
         return self._obstacle_grid
+
+    @property
+    def reservation_table(self):
+        if self._reservation_table is None:
+            self._reservation_table = ReservationTable(self.energy_grid)
+
+            if (
+                Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
+                and Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
+            ):
+                add_dynamic_environment(self._reservation_table, self)
+
+        return self._reservation_table
+
+
+def add_dynamic_environment(rt, state):
+    shift = Params.OBSTACLE_MOVEMENT_DIRECTION
+
+    for node in state.space:
+        if node.type == NodeType.asteroid:
+            point = node.coordinates
+            path = []
+            match_step = state.match_step
+            global_step = state.global_step
+            while match_step <= Params.MAX_STEPS_IN_MATCH:
+                if (
+                    len(path) > 0
+                    and (global_step - 1) % Params.OBSTACLE_MOVEMENT_PERIOD == 0
+                ):
+                    rt.add_vertex_constraint(point, len(path))
+                    point = warp_point(point[0] + shift[0], point[1] + shift[1])
+                path.append(point)
+                match_step += 1
+                global_step += 1
+
+            rt.add_path(path, reserve_destination=False)
+
+        elif node.type == NodeType.nebula and Params.NEBULA_ENERGY_REDUCTION != 0:
+            point = node.coordinates
+            path = []
+            match_step = state.match_step
+            global_step = state.global_step
+            while match_step <= Params.MAX_STEPS_IN_MATCH:
+                if (
+                    len(path) > 1
+                    and (global_step - 2) % Params.OBSTACLE_MOVEMENT_PERIOD == 0
+                ):
+                    point = warp_point(point[0] + shift[0], point[1] + shift[1])
+                path.append(point)
+                match_step += 1
+                global_step += 1
+
+            rt.add_weight_path(path, weight=Params.NEBULA_ENERGY_REDUCTION)
+
+    return rt
 
 
 def create_energy_grid(state):
