@@ -146,7 +146,7 @@ def _add_opp_ships(rt, state, ship_energy):
         opp_coord = opp_ship.coordinates
         for p in nearby_positions(*opp_coord, distance=2):
             if manhattan_distance(p, opp_coord) <= 2:
-                rt.add_vertex_constraint(p, time=1)
+                rt.add_vertex_constraint(time=1, node=p)
 
 
 def find_closest_target(state, start, targets):

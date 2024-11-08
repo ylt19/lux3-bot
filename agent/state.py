@@ -220,7 +220,7 @@ def add_dynamic_environment(rt, state):
                     len(path) > 0
                     and (global_step - 1) % Params.OBSTACLE_MOVEMENT_PERIOD == 0
                 ):
-                    rt.add_vertex_constraint(point, len(path))
+                    rt.add_vertex_constraint(time=len(path), node=point)
                     point = warp_point(point[0] + shift[0], point[1] + shift[1])
                 path.append(point)
                 match_step += 1
