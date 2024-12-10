@@ -1,9 +1,8 @@
 import numpy as np
 from copy import deepcopy
-from sys import stderr as err
 from enum import IntEnum
 
-from .base import Params, SPACE_SIZE, get_opposite, warp_point
+from .base import log, Params, SPACE_SIZE, get_opposite, warp_point
 
 
 class NodeType(IntEnum):
@@ -192,9 +191,8 @@ class Space:
             ):
                 energy_nodes_shifted = True
 
-        # print(
-        #     f"obstacles_shifted = {obstacles_shifted}, energy_nodes_shifted = {energy_nodes_shifted}",
-        #     file=err,
+        # log(
+        #     f"obstacles_shifted = {obstacles_shifted}, energy_nodes_shifted = {energy_nodes_shifted}"
         # )
 
         self._obstacles_movement_status.append(obstacles_shifted)
@@ -203,9 +201,9 @@ class Space:
             if period is not None:
                 Params.OBSTACLE_MOVEMENT_PERIOD_FOUND = True
                 Params.OBSTACLE_MOVEMENT_PERIOD = period
-                print(
+                log(
                     f"Find param OBSTACLE_MOVEMENT_PERIOD = {period}",
-                    file=err,
+                    level=2,
                 )
 
         if not Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND and obstacles_shifted:
@@ -213,15 +211,15 @@ class Space:
             if direction:
                 Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND = True
                 Params.OBSTACLE_MOVEMENT_DIRECTION = direction
-                print(
+                log(
                     f"Find param OBSTACLE_MOVEMENT_DIRECTION = {direction}",
-                    file=err,
+                    level=2,
                 )
 
                 self.move(*Params.OBSTACLE_MOVEMENT_DIRECTION, inplace=True)
                 obstacles_shifted = False
             else:
-                print("WARNING: Can't find OBSTACLE_MOVEMENT_DIRECTION", file=err)
+                log("Can't find OBSTACLE_MOVEMENT_DIRECTION", level=1)
                 for node in self:
                     node.type = NodeType.unknown
 
@@ -230,7 +228,7 @@ class Space:
             and Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
             and Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
         ):
-            print("WARNING: OBSTACLE_MOVEMENTS params are incorrect", file=err)
+            log("OBSTACLE_MOVEMENTS params are incorrect", level=1)
             for node in self:
                 node.type = NodeType.unknown
 
@@ -289,7 +287,6 @@ class Space:
                 continue
 
             self._reward_results.append({"nodes": ship_nodes, "reward": team_reward})
-        # print(self._reward_results, file=err)
 
     def _update_reward_status_from_reward_results(self):
         filtered_results = []
@@ -327,10 +324,10 @@ class Space:
                 continue
 
             if reward > len(nodes):
-                print(
-                    f"WARNING! Something wrong with reward result: {result}"
+                log(
+                    f"Something wrong with reward result: {result}"
                     ", this result will be ignored.",
-                    file=err,
+                    level=1,
                 )
                 continue
 

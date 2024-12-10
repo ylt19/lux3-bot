@@ -1,7 +1,6 @@
-from sys import stderr as err
-
-from .base import Params
+from .base import Params, log
 from .state import State
+
 from .harvest import harvest
 from .explore import explore
 from .gather_energy import gather_energy
@@ -26,11 +25,10 @@ class Agent:
     def act(self, step: int, obs, remaining_overage_time: int = 60):
         self.state.update(obs)
 
-        # print(
-        #     f"start step {self.state.global_step}"
-        #     f", match {self.state.match_number}:{self.state.match_step}",
-        #     file=err,
-        # )
+        log(
+            f"start step {self.state.global_step}"
+            f", match {self.state.match_number}:{self.state.match_step}"
+        )
 
         if self.state.match_step == 0:
             self.previous_state = self.state.copy()

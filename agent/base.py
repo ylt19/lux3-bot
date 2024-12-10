@@ -1,4 +1,12 @@
+import os
+import sys
+
+
 class Params:
+    VERBOSITY = 2
+    if os.path.exists("/kaggle_simulations"):
+        VERBOSITY = -1
+
     # Game related constants
     MAX_UNITS = 16
     SPACE_SIZE = 24
@@ -26,7 +34,26 @@ class Params:
     OBSTACLE_MOVEMENT_DIRECTION_FOUND = False
 
 
+class Colors:
+    red = "\033[91m"
+    blue = "\033[94m"
+    yellow = "\033[93m"
+    green = "\033[92m"
+    endc = "\033[0m"
+
+
 SPACE_SIZE = Params.SPACE_SIZE
+
+
+def log(*args, level=3):
+    # 1 - Error
+    # 2 - Info
+    # 3 - Debug
+    if level <= Params.VERBOSITY:
+        if level == 1:
+            print(f"{Colors.red}Error{Colors.endc}:", *args, file=sys.stderr)
+        else:
+            print(*args, file=sys.stderr)
 
 
 def is_upper_sector(x, y) -> bool:

@@ -1,5 +1,4 @@
 import copy
-from sys import stderr as err
 from enum import IntEnum
 from pathfinding import Grid, AStar, SpaceTimeAStar, ResumableDijkstra, ReservationTable
 

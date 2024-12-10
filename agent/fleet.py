@@ -1,5 +1,4 @@
 import numpy as np
-from sys import stderr as err
 
 from .base import Params
 from .path import Action, apply_action, actions_to_path

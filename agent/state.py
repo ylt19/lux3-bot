@@ -1,24 +1,21 @@
-import copy
 from copy import deepcopy
 
 import numpy as np
-from sys import stderr as err
 from collections import defaultdict
 from pathfinding import Grid, ReservationTable
 from pathfinding.visualization import animate_grid
 
-from .base import Params, warp_point, get_spawn_location, chebyshev_distance
+from .base import (
+    log,
+    Params,
+    Colors,
+    warp_point,
+    get_spawn_location,
+    chebyshev_distance,
+)
 from .path import ActionType
 from .space import Space, NodeType
 from .fleet import Fleet
-
-
-class Colors:
-    red = "\033[91m"
-    blue = "\033[94m"
-    yellow = "\033[93m"
-    green = "\033[92m"
-    endc = "\033[0m"
 
 
 class State:
@@ -134,32 +131,32 @@ class State:
             return target[0] - spawn_location[0], target[1] - spawn_location[1]
 
     def show_visible_map(self):
-        print("Visible map:", file=err)
+        log("Visible map:")
         show_map(self.space, self.fleet, self.opp_fleet)
 
     def show_visible_energy_field(self):
-        print("Visible energy field:", file=err)
+        log("Visible energy field:")
         show_energy_field(self.space)
 
     def show_explored_map(self):
-        print("Explored map:", file=err)
+        log("Explored map:")
         show_map(self.space, self.fleet, self.opp_fleet, only_visible=False)
 
     def show_explored_energy_field(self):
-        print("Explored energy field:", file=err)
+        log("Explored energy field:")
         show_energy_field(self.space, only_visible=False)
 
     def show_exploration_info(self):
-        print("Exploration info:", file=err)
+        log("Exploration info:")
         show_exploration_info(self.space)
 
     def show_tasks(self, show_path=False):
-        print("Tasks:", file=err)
+        log("Tasks:")
         for ship in self.fleet:
             m = f" - {ship} : {ship.task}"
             if show_path:
                 m += f", {ship.path()}"
-            print(m, file=err)
+            log(m)
 
     def to_animation(self, file_name=None):
         if not file_name:
@@ -296,7 +293,7 @@ def show_map(space, my_fleet=None, opp_fleet=None, only_visible=True):
 
     opp_ships = defaultdict(int)
     if opp_fleet:
-        for ship in opp_fleet.ships:
+        for ship in opp_fleet:
             opp_ships[ship.node.coordinates] += 1
 
     line = " + " + " ".join([f"{x:>2}" for x in range(Params.SPACE_SIZE)]) + "  +\n"
@@ -338,7 +335,7 @@ def show_map(space, my_fleet=None, opp_fleet=None, only_visible=True):
         str_grid += " ".join([f"{y:>2}", *str_row, f"{y:>2}", "\n"])
 
     str_grid += line
-    print(str_grid, file=err)
+    log(str_grid)
 
 
 def show_energy_field(space, only_visible=True):
@@ -362,14 +359,13 @@ def show_energy_field(space, only_visible=True):
         str_grid += "".join([f"{y:>2}", *str_row, f" {y:>2}", "\n"])
 
     str_grid += line
-    print(str_grid, file=err)
+    log(str_grid)
 
 
 def show_exploration_info(space):
-    print(
+    log(
         f"all relics found: {Params.ALL_RELICS_FOUND}, "
-        f"all rewards found: {Params.ALL_REWARDS_FOUND}",
-        file=err,
+        f"all rewards found: {Params.ALL_REWARDS_FOUND}"
     )
 
     line = " + " + " ".join([f"{x:>2}" for x in range(Params.SPACE_SIZE)]) + "  +\n"
@@ -395,4 +391,4 @@ def show_exploration_info(space):
         str_grid += " ".join([f"{y:>2}", *str_row, f"{y:>2}", "\n"])
 
     str_grid += line
-    print(str_grid, file=err)
+    log(str_grid)
