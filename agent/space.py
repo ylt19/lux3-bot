@@ -59,7 +59,7 @@ class Node:
     def update_relic_status(self, status: bool):
         if self._explored_for_relic and self._relic != status:
             raise ValueError(
-                f"Can't change the relic status for {self}"
+                f"Can't change the relic status {self._relic}->{status} for {self}"
                 ", the tile has already been explored"
             )
 
@@ -69,7 +69,7 @@ class Node:
     def update_reward_status(self, status: bool):
         if self._explored_for_reward and self._reward != status:
             raise ValueError(
-                f"Can't change the reward status for {self}"
+                f"Can't change the reward status {self._reward}->{status} for {self}"
                 ", the tile has already been explored"
             )
 
@@ -277,10 +277,13 @@ class Space:
     def _update_reward_results(self, obs, team_to_reward):
         for team_id, team_reward in team_to_reward.items():
             ship_nodes = set()
-            for active, position in zip(
-                obs["units_mask"][team_id], obs["units"]["position"][team_id]
+            for active, energy, position in zip(
+                obs["units_mask"][team_id],
+                obs["units"]["energy"][team_id],
+                obs["units"]["position"][team_id],
             ):
-                if active:
+                if active and energy >= 0:
+                    # Only units with non-negative energy can give points
                     ship_nodes.add(self.get_node(*position))
 
             if not ship_nodes:
