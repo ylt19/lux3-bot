@@ -58,7 +58,17 @@ class State:
         points = int(obs["team_points"][self.team_id])
         reward = max(0, points - self.fleet.points)
 
-        self.space.update(self.global_step, obs, team_to_reward={self.team_id: reward})
+        opp_points = int(obs["team_points"][1 - self.team_id])
+        opp_reward = max(0, opp_points - self.opp_fleet.points)
+
+        self.space.update(
+            self.global_step,
+            obs,
+            team_id=self.team_id,
+            team_reward=reward,
+            opp_team_id=1 - self.team_id,
+            opp_team_reward=opp_reward,
+        )
         self.fleet.update(obs, self.space)
         self.opp_fleet.update(obs, self.space)
 
@@ -79,9 +89,8 @@ class State:
 
     def _update_info_about_completed_matches(self, obs):
         if self.match_step == Params.MAX_STEPS_IN_MATCH:
-            team_points = obs["team_points"]
-            Params.POINTS.append(int(team_points[self.team_id]))
-            Params.OPP_POINTS.append(int(team_points[1 - self.team_id]))
+            Params.POINTS.append(self.fleet.points)
+            Params.OPP_POINTS.append(self.opp_fleet.points)
         if self.match_step == 0 and self.match_number >= 1:
             team_wins = obs["team_wins"]
             Params.NUM_COMPLETED_MATCHES = sum(team_wins)

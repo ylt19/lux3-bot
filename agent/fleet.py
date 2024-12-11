@@ -20,7 +20,7 @@ class Fleet:
                 yield ship
 
     def update(self, obs, space: Space):
-        self.points = obs["team_points"][self.team_id]
+        self.points = int(obs["team_points"][self.team_id])
 
         for ship, active, position, energy in zip(
             self.ships,

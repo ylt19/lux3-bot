@@ -124,7 +124,15 @@ class Space:
     def get_opposite_node(self, x, y) -> Node:
         return self.get_node(*get_opposite(x, y))
 
-    def update(self, global_step, obs, team_to_reward=None):
+    def update(
+        self,
+        global_step,
+        obs,
+        team_id=0,
+        team_reward=0,
+        opp_team_id=1,
+        opp_team_reward=0,
+    ):
         self.move_obstacles(global_step)
         self._update_map(obs)
 
@@ -160,10 +168,10 @@ class Space:
 
         if not Params.ALL_REWARDS_FOUND:
             self._update_reward_status_from_relics_distribution()
-
-            if team_to_reward:
-                self._update_reward_results(obs, team_to_reward)
-
+            self._update_reward_results(obs, team_id, team_reward, full_visibility=True)
+            self._update_reward_results(
+                obs, opp_team_id, opp_team_reward, full_visibility=False
+            )
             self._update_reward_status_from_reward_results()
 
     def _update_map(self, obs):
@@ -274,22 +282,25 @@ class Space:
                 # no relics in range RELIC_REWARD_RANGE
                 node.update_reward_status(False)
 
-    def _update_reward_results(self, obs, team_to_reward):
-        for team_id, team_reward in team_to_reward.items():
-            ship_nodes = set()
-            for active, energy, position in zip(
-                obs["units_mask"][team_id],
-                obs["units"]["energy"][team_id],
-                obs["units"]["position"][team_id],
-            ):
-                if active and energy >= 0:
-                    # Only units with non-negative energy can give points
-                    ship_nodes.add(self.get_node(*position))
+    def _update_reward_results(self, obs, team_id, team_reward, full_visibility=True):
+        ship_nodes = set()
+        for active, energy, position in zip(
+            obs["units_mask"][team_id],
+            obs["units"]["energy"][team_id],
+            obs["units"]["position"][team_id],
+        ):
+            if active and energy >= 0:
+                # Only units with non-negative energy can give points
+                ship_nodes.add(self.get_node(*position))
 
-            if not ship_nodes:
-                continue
-
-            self._reward_results.append({"nodes": ship_nodes, "reward": team_reward})
+        if ship_nodes:
+            self._reward_results.append(
+                {
+                    "nodes": ship_nodes,
+                    "reward": team_reward,
+                    "full_visibility": full_visibility,
+                }
+            )
 
     def _update_reward_status_from_reward_results(self):
         filtered_results = []
@@ -321,20 +332,31 @@ class Space:
                     self._update_reward_status(*node.coordinates, status=False)
                 continue
 
-            if reward == len(nodes):
-                for node in nodes:
-                    self._update_reward_status(*node.coordinates, status=True)
-                continue
+            if result["full_visibility"]:
+                if reward == len(nodes):
+                    for node in nodes:
+                        self._update_reward_status(*node.coordinates, status=True)
+                    continue
 
-            if reward > len(nodes):
-                log(
-                    f"Something wrong with reward result: {result}"
-                    ", this result will be ignored.",
-                    level=1,
-                )
-                continue
+                if reward > len(nodes):
+                    log(
+                        f"Something wrong with reward result: {result}"
+                        ", this result will be ignored.",
+                        level=1,
+                    )
+                    continue
+            else:
+                if reward >= len(nodes):
+                    # We can't see the entire fleet, we can't tell where these rewards came from
+                    continue
 
-            filtered_results.append({"nodes": nodes, "reward": reward})
+            filtered_results.append(
+                {
+                    "nodes": nodes,
+                    "reward": reward,
+                    "full_visibility": result["full_visibility"],
+                }
+            )
 
         self._reward_results = filtered_results
 
