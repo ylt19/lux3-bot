@@ -152,7 +152,16 @@ def find_closest_target(state, start, targets):
     if not targets:
         return None, float("inf")
 
-    rs = ResumableDijkstra(state.obstacle_grid, start)
+    grid = state.obstacle_grid
+    if not state.space.is_walkable(*start):
+        # There is an asteroid at our starting position.
+        # However, we can still move to an adjacent free tile.
+        # We need to clear the obstacle from the grid,
+        # as our pathfinding cannot handle obstacles at the start.
+        grid = copy.copy(grid)
+        grid.remove_obstacle(start)
+
+    rs = ResumableDijkstra(grid, start)
 
     target, min_distance = None, float("inf")
     for t in targets:
