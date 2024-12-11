@@ -24,8 +24,8 @@ class Agent:
         self.state.update(obs)
 
         log(
-            f"start step {self.state.global_step}"
-            f", match {self.state.match_number}:{self.state.match_step}"
+            f"start step {self.state.global_step:>3}"
+            f", match {self.state.match_number}:{self.state.match_step:>3}"
             f", wins {Params.NUM_WINS}/{Params.NUM_COMPLETED_MATCHES}"
         )
 

@@ -303,62 +303,85 @@ class Space:
             )
 
     def _update_reward_status_from_reward_results(self):
-        filtered_results = []
-        for result in self._reward_results:
-            if result["reward"] == 0:
-                for node in result["nodes"]:
-                    self._update_reward_status(*node.coordinates, status=False)
-                continue
 
-            nodes = set()
-            known_reward = 0
-            for n in result["nodes"]:
-                if n.explored_for_reward and not n.reward:
+        count = 0
+
+        while True:
+            count += 1
+
+            updated = False
+
+            filtered_results = []
+            for result in self._reward_results:
+
+                if result["reward"] == 0:
+                    for node in result["nodes"]:
+                        updated = True
+                        self._update_reward_status(*node.coordinates, status=False)
                     continue
 
-                if n.reward:
-                    known_reward += 1
+                nodes = set()
+                known_reward = 0
+                for n in result["nodes"]:
+                    if n.explored_for_reward and not n.reward:
+                        continue
+
+                    if n.reward:
+                        known_reward += 1
+                        continue
+
+                    nodes.add(n)
+
+                if not nodes:
                     continue
 
-                nodes.add(n)
+                reward = result["reward"] - known_reward
 
-            if not nodes:
-                continue
-
-            reward = result["reward"] - known_reward
-
-            if reward == 0:
-                for node in nodes:
-                    self._update_reward_status(*node.coordinates, status=False)
-                continue
-
-            if result["full_visibility"]:
-                if reward == len(nodes):
+                if reward == 0:
                     for node in nodes:
-                        self._update_reward_status(*node.coordinates, status=True)
+                        updated = True
+                        self._update_reward_status(*node.coordinates, status=False)
                     continue
 
-                if reward > len(nodes):
-                    log(
-                        f"Something wrong with reward result: {result}"
-                        ", this result will be ignored.",
-                        level=1,
-                    )
-                    continue
-            else:
-                if reward >= len(nodes):
-                    # We can't see the entire fleet, we can't tell where these rewards came from
-                    continue
+                if result["full_visibility"]:
+                    if reward == len(nodes):
+                        for node in nodes:
+                            updated = True
+                            self._update_reward_status(*node.coordinates, status=True)
+                        continue
 
-            filtered_results.append(
-                {
-                    "nodes": nodes,
-                    "reward": reward,
-                    "full_visibility": result["full_visibility"],
-                }
-            )
+                    if reward > len(nodes):
+                        log(
+                            f"Something wrong with reward result: {result}"
+                            ", this result will be ignored.",
+                            level=1,
+                        )
+                        continue
+                else:
+                    if reward >= len(nodes):
+                        # We can't see the entire fleet, we can't tell where these rewards came from
+                        continue
 
-        self._reward_results = filtered_results
+                filtered_results.append(
+                    {
+                        "nodes": nodes,
+                        "reward": reward,
+                        "full_visibility": result["full_visibility"],
+                    }
+                )
+
+            self._reward_results = filtered_results
+
+            if not updated:
+                break
+
+            if count > 10:
+                log(
+                    "It takes too many cycles to _update_reward_status_from_reward_results. "
+                    "It is possible that there is a bug somewhere",
+                    level=1,
+                )
+                break
 
     def _update_relic_status(self, x, y, status):
         node = self.get_node(x, y)
