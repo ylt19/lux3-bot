@@ -46,6 +46,8 @@ class State:
         assert obs["steps"] == self.global_step
         assert obs["match_steps"] == self.match_step
 
+        self._update_info_about_completed_matches(obs)
+
         if self.match_step == 0:
             self.fleet.clear()
             self.opp_fleet.clear()
@@ -74,6 +76,16 @@ class State:
         if self.match_step > Params.MAX_STEPS_IN_MATCH:
             self.match_step = 0
             self.match_number += 1
+
+    def _update_info_about_completed_matches(self, obs):
+        if self.match_step == Params.MAX_STEPS_IN_MATCH:
+            team_points = obs["team_points"]
+            Params.POINTS.append(int(team_points[self.team_id]))
+            Params.OPP_POINTS.append(int(team_points[1 - self.team_id]))
+        if self.match_step == 0 and self.match_number >= 1:
+            team_wins = obs["team_wins"]
+            Params.NUM_COMPLETED_MATCHES = sum(team_wins)
+            Params.NUM_WINS = int(team_wins[self.team_id])
 
     def steps_left_in_match(self) -> int:
         return Params.MAX_STEPS_IN_MATCH - self.match_step

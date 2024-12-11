@@ -8,10 +8,8 @@ from .gather_energy import gather_energy
 
 class Agent:
     def __init__(self, player: str, env_cfg) -> None:
-        self.player = player
-        self.opp_player = "player_1" if self.player == "player_0" else "player_0"
-        self.team_id = 0 if self.player == "player_0" else 1
-        self.opp_team_id = 1 if self.team_id == 0 else 0
+        self.team_id = 0 if player == "player_0" else 1
+        self.opp_team_id = 1 - self.team_id
 
         Params.MAX_UNITS = env_cfg["max_units"]
         Params.UNIT_MOVE_COST = env_cfg["unit_move_cost"]
@@ -28,6 +26,7 @@ class Agent:
         log(
             f"start step {self.state.global_step}"
             f", match {self.state.match_number}:{self.state.match_step}"
+            f", wins {Params.NUM_WINS}/{Params.NUM_COMPLETED_MATCHES}"
         )
 
         if self.state.match_step == 0:

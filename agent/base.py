@@ -33,6 +33,12 @@ class Params:
     OBSTACLE_MOVEMENT_PERIOD_FOUND = False
     OBSTACLE_MOVEMENT_DIRECTION_FOUND = False
 
+    # Info about completed matches
+    NUM_COMPLETED_MATCHES = 0
+    NUM_WINS = 0
+    POINTS = []  # points we scored
+    OPP_POINTS = []  # points scored by the opponent
+
 
 class Colors:
     red = "\033[91m"
