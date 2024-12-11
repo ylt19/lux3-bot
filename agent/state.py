@@ -194,11 +194,7 @@ class State:
         if self._reservation_table is None:
             self._reservation_table = ReservationTable(self.energy_grid)
 
-            if (
-                Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
-                and Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
-            ):
-                add_dynamic_environment(self._reservation_table, self)
+            add_dynamic_environment(self._reservation_table, self)
 
         return self._reservation_table
 
