@@ -98,11 +98,7 @@ class Ship:
         self.steps_since_last_viewed = 0
 
     def can_move(self) -> bool:
-        return (
-            self.node is not None
-            and self.node.is_walkable
-            and self.energy >= Params.UNIT_MOVE_COST
-        )
+        return self.node is not None and self.energy >= Params.UNIT_MOVE_COST
 
     def can_sap(self) -> bool:
         return self.node is not None and self.energy >= Params.UNIT_SAP_COST
