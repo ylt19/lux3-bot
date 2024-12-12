@@ -1,55 +1,58 @@
-from pathfinding import ResumableBFS
+import numpy as np
+from scipy.ndimage import convolve
 
-from .base import Params
+from .base import log, Params, SPACE_SIZE, is_inside
 from .path import (
+    DIRECTIONS,
     path_to_actions,
+    get_reachable_nodes,
     find_closest_target,
     estimate_energy_cost,
     find_path_in_dynamic_environment,
 )
 from .space import NodeType
 from .state import State
-from .tasks import GatherEnergy
+from .tasks import GatherEnergy, HarvestTask
+
+REWARD_RADIUS = 4
+REWARD_NUMBER_RELAXATION = 3
+RELAXATION_KERNEL = np.array(
+    [
+        [0.00, 0.10, 0.11, 0.10, 0.00],
+        [0.10, 0.11, 0.11, 0.11, 0.10],
+        [0.11, 0.11, 0.11, 0.11, 0.11],
+        [0.10, 0.11, 0.11, 0.11, 0.10],
+        [0.00, 0.11, 0.11, 0.10, 0.00],
+    ],
+    dtype=np.float32,
+)
+BOUNDARY_PENALTY = [0.5, 0.8, 0.95]
+ENERGY_MULTIPLIER = 0.25
+BUNCHING_PENALTY = 2
 
 
 def gather_energy(state: State):
 
-    max_energy = 0
-    for node in state.space:
-        if node.energy is not None:
-            max_energy = max(max_energy, node.energy)
+    free_ships = []
+    busy_ships = []
+    for ship in state.fleet:
+        if ship.task and not isinstance(ship.task, GatherEnergy):
+            busy_ships.append(ship)
+        else:
+            free_ships.append(ship)
 
-    targets = []
-    for node in state.space:
-        if node.energy is not None and node.energy >= max_energy - 1:
-            targets.append(node.coordinates)
-
-    if not targets:
+    if not free_ships:
         return
 
-    grid = state.obstacle_grid
-    rs = ResumableBFS(grid, (0, 0))
-    components = [set(x) for x in grid.find_components()]
-    steps_left = state.steps_left_in_match()
+    score_map = estimate_gather_energy_score_map(state)
 
-    for ship in state.fleet:
-        ship_position = ship.coordinates
+    for ship in busy_ships:
+        if isinstance(ship.task, HarvestTask):
+            add_bunching_penalty(score_map, ship.task.coordinates)
 
-        if ship.task and not isinstance(ship.task, GatherEnergy):
-            continue
-
-        available_locations = {ship.coordinates}
-        for component in components:
-            if ship_position in component:
-                available_locations = component
-                break
-
-        rs.start_node = ship_position
-        available_locations = [
-            xy for xy in available_locations if rs.distance(xy) < steps_left
-        ]
-
-        targets = get_positions_with_max_energy(state, available_locations)
+    for ship in free_ships:
+        available_nodes = get_reachable_nodes(state, ship.coordinates)
+        targets = get_positions_with_max_energy(available_nodes, score_map)
 
         target, _ = find_closest_target(state, ship.coordinates, targets)
         if not target:
@@ -64,15 +67,61 @@ def gather_energy(state: State):
         if ship.energy >= energy:
             ship.task = GatherEnergy()
             ship.action_queue = path_to_actions(path)
+            add_bunching_penalty(score_map, target)
         else:
             ship.task = None
 
 
-def get_positions_with_max_energy(state, positions):
+def get_positions_with_max_energy(nodes, score_map):
+    position_to_score = {}
+    for node in nodes:
+        x, y = node.x, node.y
+        position_to_score[(x, y)] = score_map[y][x]
 
-    position_to_energy = {}
-    for x, y in positions:
-        node = state.space.get_node(x, y)
+    if not position_to_score:
+        return []
+
+    max_score = max(position_to_score.values())
+
+    return [xy for xy, energy in position_to_score.items() if energy >= max_score - 0.5]
+
+
+def add_bunching_penalty(score_map, position):
+    for d in DIRECTIONS[:5]:
+        x = position[0] + d[0]
+        y = position[1] + d[1]
+        if is_inside(x, y):
+            score_map[y][x] -= BUNCHING_PENALTY
+
+
+def estimate_gather_energy_score_map(state):
+
+    reward_map = np.zeros(
+        (SPACE_SIZE + 2 * REWARD_RADIUS, SPACE_SIZE + 2 * REWARD_RADIUS), np.int16
+    )
+    for node in state.space.reward_nodes:
+        if node.reward:
+            reward_map[node.y + REWARD_RADIUS][node.x + REWARD_RADIUS] = 1
+
+    sub_shape = (REWARD_RADIUS * 2 + 1, REWARD_RADIUS * 2 + 1)
+    view_shape = tuple(np.subtract(reward_map.shape, sub_shape) + 1) + sub_shape
+    strides = reward_map.strides + reward_map.strides
+    sub_matrices = np.lib.stride_tricks.as_strided(reward_map, view_shape, strides)
+    score_map = sub_matrices.sum(axis=(2, 3), dtype=np.float32)
+
+    score_map = score_map ** (1 / REWARD_NUMBER_RELAXATION)
+    score_map = convolve(score_map, RELAXATION_KERNEL, mode="constant", cval=0)
+
+    for i, x in enumerate(BOUNDARY_PENALTY):
+        score_map[i, i : SPACE_SIZE - i] *= x
+        score_map[SPACE_SIZE - 1 - i, i : SPACE_SIZE - i] *= x
+        score_map[i : SPACE_SIZE - i, i] *= x
+        score_map[i : SPACE_SIZE - i, SPACE_SIZE - 1 - i] *= x
+
+    for node in state.space:
+        if not node.is_walkable:
+            score_map[node.y][node.x] = 0
+            continue
 
         energy = node.energy
         if energy is None:
@@ -81,11 +130,17 @@ def get_positions_with_max_energy(state, positions):
         if node.type == NodeType.nebula:
             energy -= Params.NEBULA_ENERGY_REDUCTION
 
-        position_to_energy[(x, y)] = energy
+        score_map[node.y][node.x] += energy * ENERGY_MULTIPLIER
 
-    if not position_to_energy:
-        return []
+    score_map[score_map < 0] = 0
 
-    max_energy = max(position_to_energy.values())
+    # map_str = "\n"
+    # for y in range(SPACE_SIZE):
+    #     s = []
+    #     for x in range(SPACE_SIZE):
+    #         s.append(f"{score_map[y][x]:.2f}")
+    #     map_str += " ".join(s) + "\n"
+    #
+    # log(map_str)
 
-    return [xy for xy, energy in position_to_energy.items() if energy >= max_energy - 1]
+    return score_map

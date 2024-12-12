@@ -1,6 +1,13 @@
 import copy
 from enum import IntEnum
-from pathfinding import Grid, AStar, SpaceTimeAStar, ResumableDijkstra, ReservationTable
+from pathfinding import (
+    Grid,
+    AStar,
+    SpaceTimeAStar,
+    ResumableBFS,
+    ResumableDijkstra,
+    ReservationTable,
+)
 
 from .base import Params, is_inside, nearby_positions, manhattan_distance
 from .space import Space, NodeType
@@ -146,6 +153,28 @@ def _add_opp_ships(rt, state, ship_energy):
         for p in nearby_positions(*opp_coord, distance=1):
             if manhattan_distance(p, opp_coord) <= 1:
                 rt.add_vertex_constraint(time=1, node=p)
+
+
+def get_reachable_nodes(state, start):
+    grid = state.obstacle_grid
+    if not state.space.is_walkable(*start):
+        # There is an asteroid at our starting position.
+        # However, we can still move to an adjacent free tile.
+        # We need to clear the obstacle from the grid,
+        # as our pathfinding cannot handle obstacles at the start.
+        grid = copy.copy(grid)
+        grid.remove_obstacle(start)
+
+    rs = ResumableBFS(grid, start)
+    steps_left = state.steps_left_in_match()
+
+    reachable_nodes = []
+    for node in state.space:
+        d = rs.distance(node.coordinates)
+        if d < steps_left:
+            reachable_nodes.append(node)
+
+    return reachable_nodes
 
 
 def find_closest_target(state, start, targets):
