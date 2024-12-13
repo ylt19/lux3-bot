@@ -1,6 +1,6 @@
 from sys import stderr as err
 
-from .base import Params, is_team_sector, nearby_positions, chebyshev_distance
+from .base import log, Params, is_team_sector, nearby_positions, chebyshev_distance
 from .path import (
     path_to_actions,
     estimate_energy_cost,
@@ -225,8 +225,6 @@ def find_nebula_energy_reduction(previous_state, state):
             - Params.UNIT_MOVE_COST * is_moving
         )
 
-        # print(previous_ship.node, "->", node, "delta", delta, file=err)
-
         if abs(delta - 25) < 5:
             Params.NEBULA_ENERGY_REDUCTION = 25
         elif abs(delta - 10) < 5:
@@ -238,8 +236,8 @@ def find_nebula_energy_reduction(previous_state, state):
 
         Params.NEBULA_ENERGY_REDUCTION_FOUND = True
 
-        print(
+        log(
             f"Find param NEBULA_ENERGY_REDUCTION = {Params.NEBULA_ENERGY_REDUCTION}",
-            file=err,
+            level=2,
         )
         return
