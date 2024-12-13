@@ -203,8 +203,9 @@ class Space:
         #     f"obstacles_shifted = {obstacles_shifted}, energy_nodes_shifted = {energy_nodes_shifted}"
         # )
 
-        self._obstacles_movement_status.append(obstacles_shifted)
         if not Params.OBSTACLE_MOVEMENT_PERIOD_FOUND:
+            self._obstacles_movement_status.append(obstacles_shifted)
+
             period = _get_obstacle_movement_period(self._obstacles_movement_status)
             if period is not None:
                 Params.OBSTACLE_MOVEMENT_PERIOD_FOUND = True
@@ -236,9 +237,7 @@ class Space:
             and Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
             and Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
         ):
-            log("OBSTACLE_MOVEMENTS params are incorrect", level=1)
-            for node in self:
-                node.type = NodeType.unknown
+            raise ValueError("OBSTACLE_MOVEMENTS params are incorrect")
 
         for node in self:
             x, y = node.coordinates
@@ -246,14 +245,23 @@ class Space:
 
             node.is_visible = is_visible
 
-            if is_visible:
-                node.energy = int(obs_energy[x, y])
-            elif energy_nodes_shifted:
-                node.energy = None
-
             if is_visible and node.is_unknown:
                 node.type = NodeType(int(obs_tile_type[x, y]))
+
+                # we can also update the node type on the other side of the map
+                # because the map is symmetrical
                 self.get_opposite_node(x, y).type = node.type
+
+            if is_visible:
+                node.energy = int(obs_energy[x, y])
+
+                # the energy field should be symmetrical
+                self.get_node(*get_opposite(x, y)).energy = node.energy
+
+            elif energy_nodes_shifted:
+                # The energy field has changed
+                # I cannot predict what the new energy field will be like.
+                node.energy = None
 
     def move_obstacles(self, global_step):
         if (
