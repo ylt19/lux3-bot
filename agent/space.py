@@ -1,6 +1,7 @@
 import numpy as np
 from copy import deepcopy
 from enum import IntEnum
+from scipy.signal import convolve2d
 
 from .base import log, Params, SPACE_SIZE, get_opposite, warp_point
 
@@ -256,7 +257,7 @@ class Space:
                 node.energy = int(obs_energy[x, y])
 
                 # the energy field should be symmetrical
-                self.get_node(*get_opposite(x, y)).energy = node.energy
+                self.get_opposite_node(x, y).energy = node.energy
 
             elif energy_nodes_shifted:
                 # The energy field has changed
@@ -273,17 +274,24 @@ class Space:
             self.move(*Params.OBSTACLE_MOVEMENT_DIRECTION, inplace=True)
 
     def _update_reward_status_from_relics_distribution(self):
-        r = Params.RELIC_REWARD_RANGE
-        relic_map = np.zeros((SPACE_SIZE + 2 * r, SPACE_SIZE + 2 * r), np.int16)
+        # Rewards can only occur near relics.
+        # Therefore, if there are no relics near the node
+        # we can infer that the node does not contain a reward.
+
+        relic_map = np.zeros((SPACE_SIZE, SPACE_SIZE), np.int32)
         for node in self:
             if node.relic or not node.explored_for_relic:
-                relic_map[node.y + r][node.x + r] = 1
+                relic_map[node.y][node.x] = 1
 
-        sub_shape = (r * 2 + 1, r * 2 + 1)
-        view_shape = tuple(np.subtract(relic_map.shape, sub_shape) + 1) + sub_shape
-        strides = relic_map.strides + relic_map.strides
-        sub_matrices = np.lib.stride_tricks.as_strided(relic_map, view_shape, strides)
-        reward_map = sub_matrices.sum(axis=(2, 3))
+        reward_size = 2 * Params.RELIC_REWARD_RANGE + 1
+
+        reward_map = convolve2d(
+            relic_map,
+            np.ones((reward_size, reward_size), dtype=np.int32),
+            mode="same",
+            boundary="fill",
+            fillvalue=0,
+        )
 
         for node in self:
             if reward_map[node.y][node.x] == 0:
