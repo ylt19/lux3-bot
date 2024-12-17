@@ -48,6 +48,13 @@ class Global:
     # This data will help identify which nodes yield points.
     REWARD_RESULTS = []
 
+    # obstacles_movement_status: list of bool
+    # A history log of obstacle (asteroids and nebulae) movement events.
+    # - `True`: The ships' sensors detected a change in the obstacles' positions at this step.
+    # - `False`: The sensors did not detect any changes.
+    # This information will be used to determine the speed and direction of obstacle movement.
+    OBSTACLES_MOVEMENT_STATUS = []
+
 
 class Colors:
     red = "\033[91m"

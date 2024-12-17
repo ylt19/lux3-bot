@@ -103,7 +103,6 @@ class Space:
         self._relic_id_to_node = {}
         self._relic_nodes: set[Node] = set()
         self._reward_nodes: set[Node] = set()
-        self._obstacles_movement_status = []
 
     def __repr__(self) -> str:
         return f"Space({SPACE_SIZE}x{SPACE_SIZE})"
@@ -204,9 +203,9 @@ class Space:
         # )
 
         if not Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
-            self._obstacles_movement_status.append(obstacles_shifted)
+            Global.OBSTACLES_MOVEMENT_STATUS.append(obstacles_shifted)
 
-            period = _get_obstacle_movement_period(self._obstacles_movement_status)
+            period = _get_obstacle_movement_period(Global.OBSTACLES_MOVEMENT_STATUS)
             if period is not None:
                 Global.OBSTACLE_MOVEMENT_PERIOD_FOUND = True
                 Global.OBSTACLE_MOVEMENT_PERIOD = period
@@ -321,13 +320,15 @@ class Space:
 
         count = 0
 
+        reward_results = list(Global.REWARD_RESULTS)
+
         while True:
             count += 1
 
             updated = False
 
             filtered_results = []
-            for result in Global.REWARD_RESULTS:
+            for result in reward_results:
 
                 unknown_nodes = set()
                 known_reward = 0
@@ -383,7 +384,7 @@ class Space:
                     }
                 )
 
-            Global.REWARD_RESULTS = filtered_results
+            reward_results = filtered_results
 
             if not updated:
                 break
