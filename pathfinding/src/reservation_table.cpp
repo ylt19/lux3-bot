@@ -10,6 +10,7 @@ ReservationTable::ReservationTable(const ReservationTable& rt) : ReservationTabl
     vertex_constraints_ = rt.vertex_constraints_;
     edge_constraints_ = rt.edge_constraints_;
     semi_static_constraints_ = rt.semi_static_constraints_;
+    additional_weights_ = rt.additional_weights_;
     max_time_ = rt.max_time_;
 }
 
@@ -20,6 +21,7 @@ ReservationTable& ReservationTable::operator=(const ReservationTable& rt) {
     vertex_constraints_ = rt.vertex_constraints_;
     edge_constraints_ = rt.edge_constraints_;
     semi_static_constraints_ = rt.semi_static_constraints_;
+    additional_weights_ = rt.additional_weights_;
     max_time_ = rt.max_time_;
     return *this;
 }

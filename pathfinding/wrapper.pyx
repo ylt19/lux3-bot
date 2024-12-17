@@ -838,7 +838,7 @@ cdef class ReservationTable:
         n2_id = to_node_id(self.graph, n2)
         self._obj.add_edge_constraint(time, n1_id, n2_id)
 
-    def add_additional_weight(self, node, int time, double weight):
+    def add_additional_weight(self, int time, node, double weight):
         cdef int node_id = to_node_id(self.graph, node)
         self._obj.add_additional_weight(time, node_id, weight)
 
