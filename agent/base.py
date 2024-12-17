@@ -39,6 +39,15 @@ class Global:
     POINTS = []  # points we scored
     OPP_POINTS = []  # points scored by the opponent
 
+    # Game logs:
+
+    # REWARD_RESULTS: [{"nodes": Set[Node], "points": int}, ...]
+    # A history of reward events, where each entry contains:
+    # - "nodes": A set of nodes where our ships were located.
+    # - "points": The number of points scored at that location.
+    # This data will help identify which nodes yield points.
+    REWARD_RESULTS = []
+
 
 class Colors:
     red = "\033[91m"

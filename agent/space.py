@@ -103,7 +103,6 @@ class Space:
         self._relic_id_to_node = {}
         self._relic_nodes: set[Node] = set()
         self._reward_nodes: set[Node] = set()
-        self._reward_results = []
         self._obstacles_movement_status = []
 
     def __repr__(self) -> str:
@@ -310,7 +309,7 @@ class Space:
                 ship_nodes.add(self.get_node(*position))
 
         if ship_nodes:
-            self._reward_results.append(
+            Global.REWARD_RESULTS.append(
                 {
                     "nodes": ship_nodes,
                     "reward": team_reward,
@@ -328,15 +327,9 @@ class Space:
             updated = False
 
             filtered_results = []
-            for result in self._reward_results:
+            for result in Global.REWARD_RESULTS:
 
-                if result["reward"] == 0:
-                    for node in result["nodes"]:
-                        updated = True
-                        self._update_reward_status(*node.coordinates, status=False)
-                    continue
-
-                nodes = set()
+                unknown_nodes = set()
                 known_reward = 0
                 for n in result["nodes"]:
                     if n.explored_for_reward and not n.reward:
@@ -346,27 +339,31 @@ class Space:
                         known_reward += 1
                         continue
 
-                    nodes.add(n)
+                    unknown_nodes.add(n)
 
-                if not nodes:
+                if not unknown_nodes:
+                    # all nodes already explored, nothing to do here
                     continue
 
                 reward = result["reward"] - known_reward
 
                 if reward == 0:
-                    for node in nodes:
+                    # all nodes are empty
+                    for node in unknown_nodes:
                         updated = True
                         self._update_reward_status(*node.coordinates, status=False)
                     continue
 
                 if result["full_visibility"]:
-                    if reward == len(nodes):
-                        for node in nodes:
+                    if reward == len(unknown_nodes):
+                        # all nodes yield points
+                        for node in unknown_nodes:
                             updated = True
                             self._update_reward_status(*node.coordinates, status=True)
                         continue
 
-                    if reward > len(nodes):
+                    if reward > len(unknown_nodes):
+                        # we shouldn't be here
                         log(
                             f"Something wrong with reward result: {result}"
                             ", this result will be ignored.",
@@ -374,19 +371,19 @@ class Space:
                         )
                         continue
                 else:
-                    if reward >= len(nodes):
+                    if reward >= len(unknown_nodes):
                         # We can't see the entire fleet, we can't tell where these rewards came from
                         continue
 
                 filtered_results.append(
                     {
-                        "nodes": nodes,
+                        "nodes": unknown_nodes,
                         "reward": reward,
                         "full_visibility": result["full_visibility"],
                     }
                 )
 
-            self._reward_results = filtered_results
+            Global.REWARD_RESULTS = filtered_results
 
             if not updated:
                 break
