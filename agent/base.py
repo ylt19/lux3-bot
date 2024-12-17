@@ -2,7 +2,7 @@ import os
 import sys
 
 
-class Params:
+class Global:
     VERBOSITY = 2
     if os.path.exists("/kaggle_simulations"):
         VERBOSITY = -1
@@ -48,14 +48,14 @@ class Colors:
     endc = "\033[0m"
 
 
-SPACE_SIZE = Params.SPACE_SIZE
+SPACE_SIZE = Global.SPACE_SIZE
 
 
 def log(*args, level=3):
     # 1 - Error
     # 2 - Info
     # 3 - Debug
-    if level <= Params.VERBOSITY:
+    if level <= Global.VERBOSITY:
         if level == 1:
             print(f"{Colors.red}Error{Colors.endc}:", *args, file=sys.stderr)
         else:

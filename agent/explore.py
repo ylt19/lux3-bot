@@ -1,6 +1,6 @@
 from sys import stderr as err
 
-from .base import log, Params, is_team_sector, nearby_positions, chebyshev_distance
+from .base import log, Global, is_team_sector, nearby_positions, chebyshev_distance
 from .path import (
     path_to_actions,
     estimate_energy_cost,
@@ -21,7 +21,7 @@ def find_relics(state):
     space = state.space
     fleet = state.fleet
 
-    if Params.ALL_RELICS_FOUND:
+    if Global.ALL_RELICS_FOUND:
         delete_tasks(fleet, FindRelicNodes)
         return
 
@@ -55,7 +55,7 @@ def find_relics(state):
             ship.action_queue = path_to_actions(path)
 
             for x, y in path:
-                for xy in nearby_positions(x, y, Params.UNIT_SENSOR_RANGE):
+                for xy in nearby_positions(x, y, Global.UNIT_SENSOR_RANGE):
                     if xy in targets:
                         targets.remove(xy)
         else:
@@ -66,7 +66,7 @@ def find_rewards(state):
     space = state.space
     fleet = state.fleet
 
-    if Params.ALL_REWARDS_FOUND:
+    if Global.ALL_REWARDS_FOUND:
         delete_tasks(fleet, FindRewardNodes)
         return
 
@@ -78,7 +78,7 @@ def find_rewards(state):
             continue
 
         relic_node = space.get_node(*ship.task.coordinates)
-        if relic_node not in relic_nodes or ship.energy < Params.UNIT_MOVE_COST * 10:
+        if relic_node not in relic_nodes or ship.energy < Global.UNIT_MOVE_COST * 10:
             ship.task = None
             ship.action_queue = []
             continue
@@ -97,7 +97,7 @@ def find_rewards(state):
     for relic_node, ship in relic_ships:
         if (
             chebyshev_distance(relic_node.coordinates, ship.coordinates)
-            <= Params.RELIC_REWARD_RANGE
+            <= Global.RELIC_REWARD_RANGE
         ):
             num_ship_within_relic_range += 1
 
@@ -106,7 +106,7 @@ def find_rewards(state):
 
         targets = []
         for x, y in nearby_positions(
-            *relic_node.coordinates, Params.RELIC_REWARD_RANGE
+            *relic_node.coordinates, Global.RELIC_REWARD_RANGE
         ):
             node = space.get_node(x, y)
             if not node.explored_for_reward:
@@ -147,7 +147,7 @@ def get_unexplored_relics(space, team_id) -> list[Node]:
 
         explored = True
         for x, y in nearby_positions(
-            *relic_node.coordinates, Params.RELIC_REWARD_RANGE
+            *relic_node.coordinates, Global.RELIC_REWARD_RANGE
         ):
             node = space.get_node(x, y)
             if not node.explored_for_reward and node.is_walkable:
@@ -167,7 +167,7 @@ def find_ship_for_reward_task(state, relic_node):
     for ship in state.fleet:
         if isinstance(ship.task, FindRewardNodes):
             continue
-        if ship.energy < Params.UNIT_MOVE_COST * 10:
+        if ship.energy < Global.UNIT_MOVE_COST * 10:
             continue
         free_ships.append(ship)
 
@@ -175,7 +175,7 @@ def find_ship_for_reward_task(state, relic_node):
         return
 
     unexplored = []
-    for x, y in nearby_positions(*relic_node.coordinates, Params.RELIC_REWARD_RANGE):
+    for x, y in nearby_positions(*relic_node.coordinates, Global.RELIC_REWARD_RANGE):
         node = state.space.get_node(x, y)
         if not node.explored_for_reward:
             unexplored.append((x, y))
@@ -196,7 +196,7 @@ def delete_tasks(fleet, task_type):
 
 
 def find_nebula_energy_reduction(previous_state, state):
-    if Params.NEBULA_ENERGY_REDUCTION_FOUND:
+    if Global.NEBULA_ENERGY_REDUCTION_FOUND:
         return
 
     for previous_ship, ship in zip(previous_state.fleet, state.fleet):
@@ -209,7 +209,7 @@ def find_nebula_energy_reduction(previous_state, state):
 
         is_moving = int(node != previous_ship.node)
 
-        if previous_ship.energy < 30 - Params.UNIT_MOVE_COST * is_moving:
+        if previous_ship.energy < 30 - Global.UNIT_MOVE_COST * is_moving:
             continue
 
         if (
@@ -222,22 +222,22 @@ def find_nebula_energy_reduction(previous_state, state):
             previous_ship.energy
             - ship.energy
             + node.energy
-            - Params.UNIT_MOVE_COST * is_moving
+            - Global.UNIT_MOVE_COST * is_moving
         )
 
         if abs(delta - 25) < 5:
-            Params.NEBULA_ENERGY_REDUCTION = 25
+            Global.NEBULA_ENERGY_REDUCTION = 25
         elif abs(delta - 10) < 5:
-            Params.NEBULA_ENERGY_REDUCTION = 10
+            Global.NEBULA_ENERGY_REDUCTION = 10
         elif abs(delta - 0) < 5:
-            Params.NEBULA_ENERGY_REDUCTION = 0
+            Global.NEBULA_ENERGY_REDUCTION = 0
         else:
             continue
 
-        Params.NEBULA_ENERGY_REDUCTION_FOUND = True
+        Global.NEBULA_ENERGY_REDUCTION_FOUND = True
 
         log(
-            f"Find param NEBULA_ENERGY_REDUCTION = {Params.NEBULA_ENERGY_REDUCTION}",
+            f"Find param NEBULA_ENERGY_REDUCTION = {Global.NEBULA_ENERGY_REDUCTION}",
             level=2,
         )
         return

@@ -7,7 +7,7 @@ from pathfinding.visualization import animate_grid
 
 from .base import (
     log,
-    Params,
+    Global,
     Colors,
     warp_point,
     get_spawn_location,
@@ -73,8 +73,8 @@ class State:
         self.opp_fleet.update(obs, self.space)
 
         if (
-            Params.OBSTACLE_MOVEMENT_PERIOD == 0
-            or (self.global_step - 1) % Params.OBSTACLE_MOVEMENT_PERIOD != 0
+            Global.OBSTACLE_MOVEMENT_PERIOD == 0
+            or (self.global_step - 1) % Global.OBSTACLE_MOVEMENT_PERIOD != 0
         ):
             self.space.update_nodes_by_expected_sensor_mask(
                 self.fleet.expected_sensor_mask()
@@ -83,21 +83,21 @@ class State:
     def _update_step_counters(self):
         self.global_step += 1
         self.match_step += 1
-        if self.match_step > Params.MAX_STEPS_IN_MATCH:
+        if self.match_step > Global.MAX_STEPS_IN_MATCH:
             self.match_step = 0
             self.match_number += 1
 
     def _update_info_about_completed_matches(self, obs):
-        if self.match_step == Params.MAX_STEPS_IN_MATCH:
-            Params.POINTS.append(self.fleet.points)
-            Params.OPP_POINTS.append(self.opp_fleet.points)
+        if self.match_step == Global.MAX_STEPS_IN_MATCH:
+            Global.POINTS.append(self.fleet.points)
+            Global.OPP_POINTS.append(self.opp_fleet.points)
         if self.match_step == 0 and self.match_number >= 1:
             team_wins = obs["team_wins"]
-            Params.NUM_COMPLETED_MATCHES = sum(team_wins)
-            Params.NUM_WINS = int(team_wins[self.team_id])
+            Global.NUM_COMPLETED_MATCHES = sum(team_wins)
+            Global.NUM_WINS = int(team_wins[self.team_id])
 
     def steps_left_in_match(self) -> int:
-        return Params.MAX_STEPS_IN_MATCH - self.match_step
+        return Global.MAX_STEPS_IN_MATCH - self.match_step
 
     def copy(self) -> "State":
         copy_state = State(self.team_id)
@@ -141,7 +141,7 @@ class State:
                 continue
 
             distance = chebyshev_distance(spawn_location, next_position)
-            if distance > Params.UNIT_SAP_RANGE:
+            if distance > Global.UNIT_SAP_RANGE:
                 continue
 
             if target is None or min_distance > distance:
@@ -221,7 +221,7 @@ class State:
 
 
 def add_dynamic_environment(rt, state):
-    shift = Params.OBSTACLE_MOVEMENT_DIRECTION
+    shift = Global.OBSTACLE_MOVEMENT_DIRECTION
 
     for node in state.space:
         if node.type == NodeType.asteroid:
@@ -229,10 +229,10 @@ def add_dynamic_environment(rt, state):
             path = []
             match_step = state.match_step
             global_step = state.global_step
-            while match_step <= Params.MAX_STEPS_IN_MATCH:
+            while match_step <= Global.MAX_STEPS_IN_MATCH:
                 if (
                     len(path) > 0
-                    and (global_step - 1) % Params.OBSTACLE_MOVEMENT_PERIOD == 0
+                    and (global_step - 1) % Global.OBSTACLE_MOVEMENT_PERIOD == 0
                 ):
                     rt.add_vertex_constraint(time=len(path), node=point)
                     point = warp_point(point[0] + shift[0], point[1] + shift[1])
@@ -242,35 +242,35 @@ def add_dynamic_environment(rt, state):
 
             rt.add_path(path, reserve_destination=False)
 
-        elif node.type == NodeType.nebula and Params.NEBULA_ENERGY_REDUCTION != 0:
+        elif node.type == NodeType.nebula and Global.NEBULA_ENERGY_REDUCTION != 0:
             point = node.coordinates
             path = []
             match_step = state.match_step
             global_step = state.global_step
-            while match_step <= Params.MAX_STEPS_IN_MATCH:
+            while match_step <= Global.MAX_STEPS_IN_MATCH:
                 if (
                     len(path) > 1
-                    and (global_step - 2) % Params.OBSTACLE_MOVEMENT_PERIOD == 0
+                    and (global_step - 2) % Global.OBSTACLE_MOVEMENT_PERIOD == 0
                 ):
                     point = warp_point(point[0] + shift[0], point[1] + shift[1])
                 path.append(point)
                 match_step += 1
                 global_step += 1
 
-            rt.add_weight_path(path, weight=Params.NEBULA_ENERGY_REDUCTION)
+            rt.add_weight_path(path, weight=Global.NEBULA_ENERGY_REDUCTION)
 
     return rt
 
 
 def create_energy_grid(state):
-    weights = np.zeros((Params.SPACE_SIZE, Params.SPACE_SIZE), np.int16)
+    weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.int16)
     for node in state.space:
 
         node_energy = node.energy
         if node_energy is None:
-            node_energy = Params.HIDDEN_NODE_ENERGY
+            node_energy = Global.HIDDEN_NODE_ENERGY
 
-        w = Params.MAX_ENERGY_PER_TILE + 1 - node_energy
+        w = Global.MAX_ENERGY_PER_TILE + 1 - node_energy
 
         weights[node.y][node.x] = w
 
@@ -278,7 +278,7 @@ def create_energy_grid(state):
 
 
 def create_grid_with_obstacles(state):
-    weights = np.zeros((Params.SPACE_SIZE, Params.SPACE_SIZE), np.int16)
+    weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.int16)
     for node in state.space:
 
         if not node.is_walkable:
@@ -286,12 +286,12 @@ def create_grid_with_obstacles(state):
         else:
             node_energy = node.energy
             if node_energy is None:
-                node_energy = Params.HIDDEN_NODE_ENERGY
+                node_energy = Global.HIDDEN_NODE_ENERGY
 
-            w = Params.MAX_ENERGY_PER_TILE + 1 - node_energy
+            w = Global.MAX_ENERGY_PER_TILE + 1 - node_energy
 
         if node.type == NodeType.nebula:
-            w += Params.NEBULA_ENERGY_REDUCTION
+            w += Global.NEBULA_ENERGY_REDUCTION
 
         weights[node.y][node.x] = w
 
@@ -313,13 +313,13 @@ def show_map(space, my_fleet=None, opp_fleet=None, only_visible=True):
         for ship in opp_fleet:
             opp_ships[ship.node.coordinates] += 1
 
-    line = " + " + " ".join([f"{x:>2}" for x in range(Params.SPACE_SIZE)]) + "  +\n"
+    line = " + " + " ".join([f"{x:>2}" for x in range(Global.SPACE_SIZE)]) + "  +\n"
     str_grid = line
-    for y in range(Params.SPACE_SIZE):
+    for y in range(Global.SPACE_SIZE):
 
         str_row = []
 
-        for x in range(Params.SPACE_SIZE):
+        for x in range(Global.SPACE_SIZE):
             node = space.get_node(x, y)
 
             if node.type == NodeType.unknown or (only_visible and not node.is_visible):
@@ -360,13 +360,13 @@ def show_energy_field(space, only_visible=True):
         color = Colors.green if i > 0 else Colors.red
         return f"{color}{i:>3}{Colors.endc}"
 
-    line = " + " + " ".join([f"{x:>2}" for x in range(Params.SPACE_SIZE)]) + "  +\n"
+    line = " + " + " ".join([f"{x:>2}" for x in range(Global.SPACE_SIZE)]) + "  +\n"
     str_grid = line
-    for y in range(Params.SPACE_SIZE):
+    for y in range(Global.SPACE_SIZE):
 
         str_row = []
 
-        for x in range(Params.SPACE_SIZE):
+        for x in range(Global.SPACE_SIZE):
             node = space.get_node(x, y)
             if node.energy is None or (only_visible and not node.is_visible):
                 str_row.append(" ..")
@@ -381,17 +381,17 @@ def show_energy_field(space, only_visible=True):
 
 def show_exploration_info(space):
     log(
-        f"all relics found: {Params.ALL_RELICS_FOUND}, "
-        f"all rewards found: {Params.ALL_REWARDS_FOUND}"
+        f"all relics found: {Global.ALL_RELICS_FOUND}, "
+        f"all rewards found: {Global.ALL_REWARDS_FOUND}"
     )
 
-    line = " + " + " ".join([f"{x:>2}" for x in range(Params.SPACE_SIZE)]) + "  +\n"
+    line = " + " + " ".join([f"{x:>2}" for x in range(Global.SPACE_SIZE)]) + "  +\n"
     str_grid = line
-    for y in range(Params.SPACE_SIZE):
+    for y in range(Global.SPACE_SIZE):
 
         str_row = []
 
-        for x in range(Params.SPACE_SIZE):
+        for x in range(Global.SPACE_SIZE):
             node = space.get_node(x, y)
             if not node.explored_for_relic:
                 s1 = "."

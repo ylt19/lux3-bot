@@ -9,7 +9,7 @@ from pathfinding import (
     ReservationTable,
 )
 
-from .base import Params, is_inside, nearby_positions, manhattan_distance
+from .base import Global, is_inside, nearby_positions, manhattan_distance
 from .space import Space, NodeType
 
 DIRECTIONS = [
@@ -107,13 +107,13 @@ def estimate_energy_cost(space: Space, path: list[tuple[int, int]]):
         if node.energy is not None:
             energy -= node.energy
         else:
-            energy -= Params.HIDDEN_NODE_ENERGY
+            energy -= Global.HIDDEN_NODE_ENERGY
 
         if node.type == NodeType.nebula:
-            energy += Params.NEBULA_ENERGY_REDUCTION
+            energy += Global.NEBULA_ENERGY_REDUCTION
 
         if (x, y) != last_position:
-            energy += Params.UNIT_MOVE_COST
+            energy += Global.UNIT_MOVE_COST
 
     return energy
 

@@ -1,6 +1,6 @@
 import numpy as np
 
-from .base import Params
+from .base import Global
 from .path import Action, apply_action, actions_to_path
 from .space import Node, Space
 
@@ -9,7 +9,7 @@ class Fleet:
     def __init__(self, team_id):
         self.team_id: int = team_id
         self.points: int = 0
-        self.ships = [Ship(unit_id) for unit_id in range(Params.MAX_UNITS)]
+        self.ships = [Ship(unit_id) for unit_id in range(Global.MAX_UNITS)]
 
     def __repr__(self):
         return f"Fleet({self.team_id})"
@@ -48,8 +48,8 @@ class Fleet:
             ship.clear()
 
     def expected_sensor_mask(self):
-        space_size = Params.SPACE_SIZE
-        sensor_range = Params.UNIT_SENSOR_RANGE
+        space_size = Global.SPACE_SIZE
+        sensor_range = Global.UNIT_SENSOR_RANGE
         mask = np.zeros((space_size, space_size), dtype=np.int16)
         for ship in self:
             x, y = ship.coordinates
@@ -98,10 +98,10 @@ class Ship:
         self.steps_since_last_viewed = 0
 
     def can_move(self) -> bool:
-        return self.node is not None and self.energy >= Params.UNIT_MOVE_COST
+        return self.node is not None and self.energy >= Global.UNIT_MOVE_COST
 
     def can_sap(self) -> bool:
-        return self.node is not None and self.energy >= Params.UNIT_SAP_COST
+        return self.node is not None and self.energy >= Global.UNIT_SAP_COST
 
     def next_position(self) -> tuple[int, int]:
         if not self.can_move() or not self.action_queue:

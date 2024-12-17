@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.ndimage import convolve
 
-from .base import log, Params, SPACE_SIZE, is_inside
+from .base import log, Global, SPACE_SIZE, is_inside
 from .path import (
     DIRECTIONS,
     path_to_actions,
@@ -128,7 +128,7 @@ def estimate_gather_energy_score_map(state):
             continue
 
         if node.type == NodeType.nebula:
-            energy -= Params.NEBULA_ENERGY_REDUCTION
+            energy -= Global.NEBULA_ENERGY_REDUCTION
 
         score_map[node.y][node.x] += energy * ENERGY_MULTIPLIER
 

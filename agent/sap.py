@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.signal import convolve2d
 
-from .base import log, Params, SPACE_SIZE
+from .base import log, Global, SPACE_SIZE
 from .path import Action, ActionType
 from .state import State
 from .tasks import HarvestTask, GatherEnergy
@@ -10,7 +10,7 @@ SAP_KERNEL = np.array([[0, 0.5, 0], [0.5, 1, 0.5], [0, 0.5, 0]], dtype=np.float3
 
 
 def sap(state: State):
-    sap_range = Params.UNIT_SAP_RANGE
+    sap_range = Global.UNIT_SAP_RANGE
     sap_diameter = sap_range * 2 + 1
     opp_ships_array = np.zeros(
         (SPACE_SIZE + 2 * sap_range, SPACE_SIZE + 2 * sap_range), dtype=np.float32

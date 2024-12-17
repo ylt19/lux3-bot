@@ -3,7 +3,7 @@ from copy import deepcopy
 from enum import IntEnum
 from scipy.signal import convolve2d
 
-from .base import log, Params, SPACE_SIZE, get_opposite, warp_point
+from .base import log, Global, SPACE_SIZE, get_opposite, warp_point
 
 
 class NodeType(IntEnum):
@@ -156,18 +156,18 @@ class Space:
             if not node.explored_for_reward:
                 all_rewards_found = False
 
-        Params.ALL_RELICS_FOUND = all_relics_found
-        Params.ALL_REWARDS_FOUND = all_rewards_found
+        Global.ALL_RELICS_FOUND = all_relics_found
+        Global.ALL_REWARDS_FOUND = all_rewards_found
 
-        if not Params.ALL_RELICS_FOUND:
+        if not Global.ALL_RELICS_FOUND:
             if self.num_relics_found == len(obs["relic_nodes_mask"]):
                 # all relics found, mark all nodes as explored for relics
-                Params.ALL_RELICS_FOUND = True
+                Global.ALL_RELICS_FOUND = True
                 for node in self:
                     if not node.explored_for_relic:
                         self._update_relic_status(*node.coordinates, status=False)
 
-        if not Params.ALL_REWARDS_FOUND:
+        if not Global.ALL_REWARDS_FOUND:
             self._update_reward_status_from_relics_distribution()
             self._update_reward_results(obs, team_id, team_reward, full_visibility=True)
             self._update_reward_results(
@@ -204,29 +204,29 @@ class Space:
         #     f"obstacles_shifted = {obstacles_shifted}, energy_nodes_shifted = {energy_nodes_shifted}"
         # )
 
-        if not Params.OBSTACLE_MOVEMENT_PERIOD_FOUND:
+        if not Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
             self._obstacles_movement_status.append(obstacles_shifted)
 
             period = _get_obstacle_movement_period(self._obstacles_movement_status)
             if period is not None:
-                Params.OBSTACLE_MOVEMENT_PERIOD_FOUND = True
-                Params.OBSTACLE_MOVEMENT_PERIOD = period
+                Global.OBSTACLE_MOVEMENT_PERIOD_FOUND = True
+                Global.OBSTACLE_MOVEMENT_PERIOD = period
                 log(
                     f"Find param OBSTACLE_MOVEMENT_PERIOD = {period}",
                     level=2,
                 )
 
-        if not Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND and obstacles_shifted:
+        if not Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND and obstacles_shifted:
             direction = _get_obstacle_movement_direction(self, obs)
             if direction:
-                Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND = True
-                Params.OBSTACLE_MOVEMENT_DIRECTION = direction
+                Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND = True
+                Global.OBSTACLE_MOVEMENT_DIRECTION = direction
                 log(
                     f"Find param OBSTACLE_MOVEMENT_DIRECTION = {direction}",
                     level=2,
                 )
 
-                self.move(*Params.OBSTACLE_MOVEMENT_DIRECTION, inplace=True)
+                self.move(*Global.OBSTACLE_MOVEMENT_DIRECTION, inplace=True)
                 obstacles_shifted = False
             else:
                 log("Can't find OBSTACLE_MOVEMENT_DIRECTION", level=1)
@@ -235,8 +235,8 @@ class Space:
 
         if (
             obstacles_shifted
-            and Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
-            and Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
+            and Global.OBSTACLE_MOVEMENT_PERIOD_FOUND
+            and Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND
         ):
             raise ValueError("OBSTACLE_MOVEMENTS params are incorrect")
 
@@ -266,12 +266,12 @@ class Space:
 
     def move_obstacles(self, global_step):
         if (
-            Params.OBSTACLE_MOVEMENT_PERIOD_FOUND
-            and Params.OBSTACLE_MOVEMENT_DIRECTION_FOUND
-            and Params.OBSTACLE_MOVEMENT_PERIOD > 0
-            and (global_step - 1) % Params.OBSTACLE_MOVEMENT_PERIOD == 0
+            Global.OBSTACLE_MOVEMENT_PERIOD_FOUND
+            and Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND
+            and Global.OBSTACLE_MOVEMENT_PERIOD > 0
+            and (global_step - 1) % Global.OBSTACLE_MOVEMENT_PERIOD == 0
         ):
-            self.move(*Params.OBSTACLE_MOVEMENT_DIRECTION, inplace=True)
+            self.move(*Global.OBSTACLE_MOVEMENT_DIRECTION, inplace=True)
 
     def _update_reward_status_from_relics_distribution(self):
         # Rewards can only occur near relics.
@@ -283,7 +283,7 @@ class Space:
             if node.relic or not node.explored_for_relic:
                 relic_map[node.y][node.x] = 1
 
-        reward_size = 2 * Params.RELIC_REWARD_RANGE + 1
+        reward_size = 2 * Global.RELIC_REWARD_RANGE + 1
 
         reward_map = convolve2d(
             relic_map,
