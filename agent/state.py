@@ -196,6 +196,8 @@ class State:
             show_weights=True,
             size=8,
         )
+
+        log(f"Save state animation as `{file_name}`")
         anim.save(file_name)
 
     @property
