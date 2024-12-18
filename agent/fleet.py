@@ -1,4 +1,5 @@
 import numpy as np
+from collections import defaultdict
 
 from .base import (
     log,
@@ -123,7 +124,7 @@ def find_hidden_constants(previous_state, state):
     between ships and opponent's ships (UNIT_SAP_DROPOFF_FACTOR, UNIT_ENERGY_VOID_FACTOR).
     """
     _find_nebula_energy_reduction(previous_state, state)
-    _find_unit_sap_dropoff_factor(previous_state, state)
+    _find_ship_interaction_constants(previous_state, state)
 
 
 def _find_nebula_energy_reduction(previous_state, state):
@@ -176,8 +177,8 @@ def _find_nebula_energy_reduction(previous_state, state):
         return
 
 
-def _find_unit_sap_dropoff_factor(previous_state, state):
-    if Global.UNIT_SAP_DROPOFF_FACTOR_FOUND:
+def _find_ship_interaction_constants(previous_state, state):
+    if Global.UNIT_SAP_DROPOFF_FACTOR_FOUND and Global.UNIT_ENERGY_VOID_FACTOR_FOUND:
         return
 
     sap_coordinates = []
@@ -202,10 +203,19 @@ def _find_unit_sap_dropoff_factor(previous_state, state):
         return
 
     void_field = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int16)
-    for ship in state.fleet:
-        if ship.node is not None:
-            for x_, y_ in cardinal_positions(*ship.coordinates):
-                void_field[x_, y_] = 1
+    for previous_ship, ship in zip(previous_state.fleet.ships, state.fleet.ships):
+        if not previous_ship.is_visible or previous_ship.energy <= 0:
+            continue
+
+        node = ship.node
+        move_cost = 0
+        if node is None:
+            node = previous_ship.node
+        elif node != previous_ship.node:
+            move_cost = Global.UNIT_MOVE_COST
+
+        for x_, y_ in cardinal_positions(*node.coordinates):
+            void_field[x_, y_] += previous_ship.energy - move_cost
 
     direct_sap_hits = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int16)
     adjacent_sap_hits = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int16)
@@ -214,6 +224,20 @@ def _find_unit_sap_dropoff_factor(previous_state, state):
         for x_, y_ in nearby_positions(x, y, distance=1):
             adjacent_sap_hits[x_, y_] += 1
 
+    if not Global.UNIT_SAP_DROPOFF_FACTOR_FOUND:
+        _find_unit_sap_dropoff_factor(
+            previous_state, state, void_field, direct_sap_hits, adjacent_sap_hits
+        )
+
+    if not Global.UNIT_ENERGY_VOID_FACTOR_FOUND:
+        _find_unit_energy_void_factor(
+            previous_state, state, void_field, direct_sap_hits, adjacent_sap_hits
+        )
+
+
+def _find_unit_sap_dropoff_factor(
+    previous_state, state, void_field, direct_sap_hits, adjacent_sap_hits
+):
     for previous_opp_ship, opp_ship in zip(
         previous_state.opp_fleet.ships, state.opp_fleet.ships
     ):
@@ -271,3 +295,72 @@ def _find_unit_sap_dropoff_factor(previous_state, state):
                 level=2,
             )
             return
+
+
+def _find_unit_energy_void_factor(
+    previous_state, state, void_field, direct_sap_hits, adjacent_sap_hits
+):
+    position_to_unit_count = defaultdict(int)
+    for opp_ship in state.opp_fleet:
+        if opp_ship.energy >= 0:
+            position_to_unit_count[opp_ship.coordinates] += 1
+
+    for previous_opp_ship, opp_ship in zip(
+        previous_state.opp_fleet.ships, state.opp_fleet.ships
+    ):
+        if not previous_opp_ship.is_visible or not opp_ship.is_visible:
+            continue
+
+        if opp_ship.energy < 0:
+            continue
+
+        x, y = opp_ship.coordinates
+        if (
+            void_field[x, y] > 0
+            and direct_sap_hits[x, y] == 0
+            and adjacent_sap_hits[x, y] == 0
+        ):
+            node_void_field = int(void_field[x, y])
+            node_unit_count = position_to_unit_count[(x, y)]
+
+            node = opp_ship.node
+            if node.energy is None:
+                continue
+
+            move_cost = 0
+            if node != previous_opp_ship.node:
+                move_cost = Global.UNIT_MOVE_COST
+
+            if previous_state.space.get_node(*node.coordinates).type == NodeType.nebula:
+                if not Global.NEBULA_ENERGY_REDUCTION_FOUND:
+                    continue
+                move_cost += Global.NEBULA_ENERGY_REDUCTION
+
+            delta = previous_opp_ship.energy - opp_ship.energy + node.energy - move_cost
+
+            options = [0.0625, 0.125, 0.25, 0.375]
+            results = []
+            for option in options:
+                expected = node_void_field / node_unit_count * option
+                result = abs(expected - delta) <= 1
+                results.append(result)
+
+            if sum(results) == 1:
+                for option, result in zip(options, results):
+                    if result:
+                        Global.UNIT_ENERGY_VOID_FACTOR = option
+
+                Global.UNIT_ENERGY_VOID_FACTOR_FOUND = True
+
+                log(
+                    f"Find param UNIT_ENERGY_VOID_FACTOR = {Global.UNIT_ENERGY_VOID_FACTOR}",
+                    level=2,
+                )
+                return
+
+            if sum(results) == 0:
+                log(
+                    f"Can't find UNIT_ENERGY_VOID_FACTOR with ship = {opp_ship}, "
+                    f"delta = {delta}, void_field = {node_void_field}, step = {state.global_step}",
+                    level=1,
+                )
