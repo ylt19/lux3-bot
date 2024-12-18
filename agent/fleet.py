@@ -244,7 +244,7 @@ def _find_unit_sap_dropoff_factor(
         if not previous_opp_ship.is_visible or not opp_ship.is_visible:
             continue
 
-        if opp_ship.energy < 0:
+        if opp_ship.energy <= 0:
             continue
 
         x, y = opp_ship.coordinates
@@ -311,7 +311,7 @@ def _find_unit_energy_void_factor(
         if not previous_opp_ship.is_visible or not opp_ship.is_visible:
             continue
 
-        if opp_ship.energy < 0:
+        if opp_ship.energy <= 0:
             continue
 
         x, y = opp_ship.coordinates
