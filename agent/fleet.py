@@ -1,8 +1,15 @@
 import numpy as np
 
-from .base import Global
-from .path import Action, apply_action, actions_to_path
-from .space import Node, Space
+from .base import (
+    log,
+    Global,
+    SPACE_SIZE,
+    is_inside,
+    nearby_positions,
+    cardinal_positions,
+)
+from .path import Action, ActionType, apply_action, actions_to_path
+from .space import Node, Space, NodeType
 
 
 class Fleet:
@@ -107,3 +114,160 @@ class Ship:
         if not self.can_move() or not self.action_queue:
             return self.coordinates
         return apply_action(*self.coordinates, action=self.action_queue[0].type)
+
+
+def find_hidden_constants(previous_state, state):
+    """
+    Attempts to discover hidden constants by observing interactions
+    between ships and nebulae (NEBULA_ENERGY_REDUCTION) and
+    between ships and opponent's ships (UNIT_SAP_DROPOFF_FACTOR, UNIT_ENERGY_VOID_FACTOR).
+    """
+    _find_nebula_energy_reduction(previous_state, state)
+    _find_unit_sap_dropoff_factor(previous_state, state)
+
+
+def _find_nebula_energy_reduction(previous_state, state):
+    if Global.NEBULA_ENERGY_REDUCTION_FOUND:
+        return
+
+    for previous_ship, ship in zip(previous_state.fleet.ships, state.fleet.ships):
+        if not previous_ship.is_visible or not ship.is_visible:
+            continue
+
+        node = ship.node
+        if node.energy is None:
+            continue
+
+        move_cost = 0
+        if node != previous_ship.node:
+            move_cost = Global.UNIT_MOVE_COST
+
+        if previous_ship.energy < 30 - move_cost:
+            continue
+
+        if (
+            node.type != NodeType.nebula
+            or previous_state.space.get_node(*node.coordinates).type != NodeType.nebula
+        ):
+            continue
+
+        delta = previous_ship.energy - ship.energy + node.energy - move_cost
+
+        if abs(delta - 25) < 5:
+            Global.NEBULA_ENERGY_REDUCTION = 25
+        elif abs(delta - 10) < 5:
+            Global.NEBULA_ENERGY_REDUCTION = 10
+        elif abs(delta - 0) < 5:
+            Global.NEBULA_ENERGY_REDUCTION = 0
+        else:
+            log(
+                f"Can't find NEBULA_ENERGY_REDUCTION with ship = {ship}, "
+                f"delta = {delta}, step = {state.global_step}",
+                level=1,
+            )
+            continue
+
+        Global.NEBULA_ENERGY_REDUCTION_FOUND = True
+
+        log(
+            f"Find param NEBULA_ENERGY_REDUCTION = {Global.NEBULA_ENERGY_REDUCTION}",
+            level=2,
+        )
+        return
+
+
+def _find_unit_sap_dropoff_factor(previous_state, state):
+    if Global.UNIT_SAP_DROPOFF_FACTOR_FOUND:
+        return
+
+    sap_coordinates = []
+    for previous_ship in previous_state.fleet:
+        action = None
+        if previous_ship.action_queue:
+            action = previous_ship.action_queue[0]
+
+        if (
+            action is None
+            or action.type != ActionType.sap
+            or not previous_ship.can_sap()
+        ):
+            continue
+
+        x, y = previous_ship.coordinates
+        dx, dy = action.dx, action.dy
+
+        sap_coordinates.append((x + dx, y + dy))
+
+    if not sap_coordinates:
+        return
+
+    void_field = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int16)
+    for ship in state.fleet:
+        if ship.node is not None:
+            for x_, y_ in cardinal_positions(*ship.coordinates):
+                void_field[x_, y_] = 1
+
+    direct_sap_hits = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int16)
+    adjacent_sap_hits = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int16)
+    for x, y in sap_coordinates:
+        direct_sap_hits[x, y] += 1
+        for x_, y_ in nearby_positions(x, y, distance=1):
+            adjacent_sap_hits[x_, y_] += 1
+
+    for previous_opp_ship, opp_ship in zip(
+        previous_state.opp_fleet.ships, state.opp_fleet.ships
+    ):
+        if not previous_opp_ship.is_visible or not opp_ship.is_visible:
+            continue
+
+        if opp_ship.energy < 0:
+            continue
+
+        x, y = opp_ship.coordinates
+        if (
+            void_field[x, y] == 0
+            and direct_sap_hits[x, y] == 0
+            and adjacent_sap_hits[x, y] > 0
+        ):
+            num_hits = int(adjacent_sap_hits[x, y])
+
+            node = opp_ship.node
+            if node.energy is None:
+                continue
+
+            move_cost = 0
+            if node != previous_opp_ship.node:
+                move_cost = Global.UNIT_MOVE_COST
+
+            if previous_state.space.get_node(*node.coordinates).type == NodeType.nebula:
+                if not Global.NEBULA_ENERGY_REDUCTION_FOUND:
+                    continue
+                move_cost += Global.NEBULA_ENERGY_REDUCTION
+
+            delta = previous_opp_ship.energy - opp_ship.energy + node.energy - move_cost
+
+            delta_per_hit = delta / num_hits
+
+            sap_cost = Global.UNIT_SAP_COST
+
+            if abs(delta_per_hit - sap_cost) <= 1:
+                Global.UNIT_SAP_DROPOFF_FACTOR = 1
+            elif abs(delta_per_hit - sap_cost * 0.5) <= 1:
+                Global.UNIT_SAP_DROPOFF_FACTOR = 0.5
+            elif abs(delta_per_hit - sap_cost * 0.25) <= 1:
+                Global.UNIT_SAP_DROPOFF_FACTOR = 0.25
+            else:
+                log(
+                    f"Can't find UNIT_SAP_DROPOFF_FACTOR with ship = {opp_ship}, "
+                    f"delta = {delta}, num_hits = {num_hits}, step = {state.global_step}",
+                    level=1,
+                )
+                continue
+
+            Global.UNIT_SAP_DROPOFF_FACTOR_FOUND = True
+
+            log(
+                f"Find param UNIT_SAP_DROPOFF_FACTOR = {Global.UNIT_SAP_DROPOFF_FACTOR}",
+                level=2,
+            )
+            return

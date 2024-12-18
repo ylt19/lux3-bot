@@ -2,6 +2,7 @@ from .base import Global, log
 from .state import State
 
 from .sap import sap
+from .fleet import find_hidden_constants
 from .harvest import harvest
 from .explore import explore
 from .gather_energy import gather_energy
@@ -33,13 +34,15 @@ class Agent:
         if self.state.match_step == 0:
             self.previous_state = self.state.copy()
 
+        find_hidden_constants(self.previous_state, self.state)
+
         # self.state.show_visible_map()
         # self.state.show_visible_energy_field()
         # self.state.show_explored_map()
         # self.state.show_explored_energy_field()
         # self.state.show_exploration_info()
 
-        explore(self.previous_state, self.state)
+        explore(self.state)
         harvest(self.state)
         sap(self.state)
         gather_energy(self.state)

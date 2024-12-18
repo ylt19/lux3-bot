@@ -1,5 +1,3 @@
-from sys import stderr as err
-
 from .base import log, Global, is_team_sector, nearby_positions, chebyshev_distance
 from .path import (
     path_to_actions,
@@ -7,12 +5,11 @@ from .path import (
     find_path_in_dynamic_environment,
     find_closest_target,
 )
-from .space import Node, NodeType
+from .space import Node
 from .tasks import FindRelicNodes, FindRewardNodes, GatherEnergy
 
 
-def explore(previous_state, state):
-    find_nebula_energy_reduction(previous_state, state)
+def explore(state):
     find_relics(state)
     find_rewards(state)
 
@@ -193,51 +190,3 @@ def delete_tasks(fleet, task_type):
     for ship in fleet:
         if isinstance(ship.task, task_type):
             ship.task = None
-
-
-def find_nebula_energy_reduction(previous_state, state):
-    if Global.NEBULA_ENERGY_REDUCTION_FOUND:
-        return
-
-    for previous_ship, ship in zip(previous_state.fleet, state.fleet):
-        if previous_ship.node is None or ship.node is None:
-            continue
-
-        node = ship.node
-        if node.energy is None:
-            continue
-
-        is_moving = int(node != previous_ship.node)
-
-        if previous_ship.energy < 30 - Global.UNIT_MOVE_COST * is_moving:
-            continue
-
-        if (
-            node.type != NodeType.nebula
-            or previous_state.space.get_node(*node.coordinates).type != NodeType.nebula
-        ):
-            continue
-
-        delta = (
-            previous_ship.energy
-            - ship.energy
-            + node.energy
-            - Global.UNIT_MOVE_COST * is_moving
-        )
-
-        if abs(delta - 25) < 5:
-            Global.NEBULA_ENERGY_REDUCTION = 25
-        elif abs(delta - 10) < 5:
-            Global.NEBULA_ENERGY_REDUCTION = 10
-        elif abs(delta - 0) < 5:
-            Global.NEBULA_ENERGY_REDUCTION = 0
-        else:
-            continue
-
-        Global.NEBULA_ENERGY_REDUCTION_FOUND = True
-
-        log(
-            f"Find param NEBULA_ENERGY_REDUCTION = {Global.NEBULA_ENERGY_REDUCTION}",
-            level=2,
-        )
-        return

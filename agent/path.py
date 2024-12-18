@@ -64,8 +64,8 @@ def apply_action(x: int, y: int, action: ActionType) -> tuple[int, int]:
 class Action:
     def __init__(self, action_type: ActionType, dx: int = 0, dy: int = 0):
         self.type = action_type
-        self.dx = dx
-        self.dy = dy
+        self.dx = int(dx)
+        self.dy = int(dy)
 
     def __repr__(self):
         if self.type == ActionType.sap:

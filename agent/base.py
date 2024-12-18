@@ -19,12 +19,11 @@ class Global:
     UNIT_SAP_COST = 30  # OPTIONS: list(range(30, 51))
     UNIT_SAP_RANGE = 3  # OPTIONS: list(range(3, 8))
     UNIT_SENSOR_RANGE = 2  # OPTIONS: list(range(2, 5))
-
-    # Agent parameters
-    HIDDEN_NODE_ENERGY = 0
     NEBULA_ENERGY_REDUCTION = 10  # OPTIONS: [0, 10, 25]
     OBSTACLE_MOVEMENT_PERIOD = 20  # OPTIONS: 20, 40
     OBSTACLE_MOVEMENT_DIRECTION = (0, 0)  # OPTIONS: [(1, -1), (-1, 1)]
+    UNIT_SAP_DROPOFF_FACTOR = 0.5  # OPTIONS: [0.25, 0.5, 1]
+    UNIT_ENERGY_VOID_FACTOR = 0.125  # OPTIONS: [0.0625, 0.125, 0.25, 0.375]
 
     # Exploration flags
     ALL_RELICS_FOUND = False
@@ -32,6 +31,8 @@ class Global:
     NEBULA_ENERGY_REDUCTION_FOUND = False
     OBSTACLE_MOVEMENT_PERIOD_FOUND = False
     OBSTACLE_MOVEMENT_DIRECTION_FOUND = False
+    UNIT_SAP_DROPOFF_FACTOR_FOUND = False
+    UNIT_ENERGY_VOID_FACTOR_FOUND = False
 
     # Info about completed matches
     NUM_COMPLETED_MATCHES = 0
@@ -54,6 +55,9 @@ class Global:
     # - `False`: The sensors did not detect any changes.
     # This information will be used to determine the speed and direction of obstacle movement.
     OBSTACLES_MOVEMENT_STATUS = []
+
+    # Others:
+    HIDDEN_NODE_ENERGY = 0
 
 
 class Colors:
@@ -113,6 +117,14 @@ def chebyshev_distance(a, b) -> int:
 def nearby_positions(x, y, distance):
     for _x in range(max(0, x - distance), min(SPACE_SIZE, x + distance + 1)):
         for _y in range(max(0, y - distance), min(SPACE_SIZE, y + distance + 1)):
+            yield _x, _y
+
+
+def cardinal_positions(x, y):
+    for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0)):
+        _x = x + dx
+        _y = y + dy
+        if is_inside(_x, _y):
             yield _x, _y
 
 
