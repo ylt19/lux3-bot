@@ -9,7 +9,13 @@ from pathfinding import (
     ReservationTable,
 )
 
-from .base import Global, is_inside, nearby_positions, manhattan_distance
+from .base import (
+    Global,
+    is_inside,
+    nearby_positions,
+    manhattan_distance,
+    cardinal_positions,
+)
 from .space import Space, NodeType
 
 DIRECTIONS = [
@@ -150,9 +156,8 @@ def _add_opp_ships(rt, state, ship_energy):
             continue
 
         opp_coord = opp_ship.coordinates
-        for p in nearby_positions(*opp_coord, distance=1):
-            if manhattan_distance(p, opp_coord) <= 1:
-                rt.add_vertex_constraint(time=1, node=p)
+        for p in cardinal_positions(*opp_coord):
+            rt.add_vertex_constraint(time=1, node=p)
 
 
 def get_reachable_nodes(state, start):
@@ -181,14 +186,28 @@ def find_closest_target(state, start, targets):
     if not targets:
         return None, float("inf")
 
-    grid = state.obstacle_grid
-    if not state.space.is_walkable(*start):
-        # There is an asteroid at our starting position.
-        # However, we can still move to an adjacent free tile.
-        # We need to clear the obstacle from the grid,
-        # as our pathfinding cannot handle obstacles at the start.
-        grid = copy.copy(grid)
-        grid.remove_obstacle(start)
+    grid = copy.copy(state.obstacle_grid)
+
+    for opp_ship in state.opp_fleet:
+
+        if opp_ship.energy > 0:
+            x, y = opp_ship.coordinates
+            w = grid.get_weight((x, y))
+            if w >= 0:
+                grid.update_weight(
+                    (x, y), w + opp_ship.energy * Global.UNIT_ENERGY_VOID_FACTOR
+                )
+
+            for x_, y_ in cardinal_positions(x, y):
+                w = grid.get_weight((x_, y_))
+                if w >= 0:
+                    grid.update_weight(
+                        (x_, y_), w + opp_ship.energy * Global.UNIT_ENERGY_VOID_FACTOR
+                    )
+
+    # If there is an asteroid at our starting position, we can still move to an adjacent free tile.
+    # We need to clear the obstacle from the grid, as our pathfinding cannot handle obstacles at the start.
+    grid.remove_obstacle(start)
 
     rs = ResumableDijkstra(grid, start)
 
