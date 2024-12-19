@@ -30,19 +30,24 @@ class Fleet:
     def update(self, obs, space: Space):
         self.points = int(obs["team_points"][self.team_id])
 
-        for ship, active, position, energy in zip(
+        for ship, visible, position, energy in zip(
             self.ships,
             obs["units_mask"][self.team_id],
             obs["units"]["position"][self.team_id],
             obs["units"]["energy"][self.team_id],
         ):
-            if active:
+            if visible:
                 ship.node = space.get_node(*position)
                 ship.energy = int(energy)
                 ship.steps_since_last_viewed = 0
             else:
-                ship.steps_since_last_viewed += 1
-                if ship.energy >= 0:
+                if (
+                    ship.node is not None
+                    and ship.energy >= 0
+                    and space.get_node(*ship.coordinates).is_visible
+                ):
+                    # The ship is out of sight of our sensors
+                    ship.steps_since_last_viewed += 1
                     ship.task = None
                     ship.action_queue = []
                 else:
