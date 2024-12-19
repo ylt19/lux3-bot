@@ -6,8 +6,6 @@ from .path import Action, ActionType
 from .state import State
 from .tasks import HarvestTask, GatherEnergy
 
-SAP_KERNEL = np.array([[0, 0.5, 0], [0.5, 1, 0.5], [0, 0.5, 0]], dtype=np.float32)
-
 
 def sap(state: State):
     sap_range = Global.UNIT_SAP_RANGE
@@ -17,7 +15,7 @@ def sap(state: State):
     )
 
     for opp_ship in state.opp_fleet:
-        if opp_ship.node.reward and opp_ship.energy >= 0:
+        if opp_ship.energy >= 0:
             x, y = opp_ship.coordinates
             opp_ships_array[y + sap_range][x + sap_range] += 1
 
@@ -37,7 +35,11 @@ def sap(state: State):
             continue
 
         local_opp_ships_array = convolve2d(
-            local_opp_ships_array, SAP_KERNEL, mode="same", boundary="fill", fillvalue=0
+            local_opp_ships_array,
+            get_sap_kernel(),
+            mode="same",
+            boundary="fill",
+            fillvalue=0,
         )
 
         max_score = local_opp_ships_array.max()
@@ -56,3 +58,10 @@ def sap(state: State):
         # log(local_opp_ships_array)
 
         ship.action_queue = [Action(ActionType.sap, dx, dy)]
+
+
+def get_sap_kernel():
+    a = np.zeros((3, 3), dtype=np.float32)
+    a[:] = Global.UNIT_SAP_DROPOFF_FACTOR
+    a[1, 1] = 1
+    return a
