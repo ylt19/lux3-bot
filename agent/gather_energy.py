@@ -62,9 +62,9 @@ def gather_energy(state: State):
         path = find_path_in_dynamic_environment(
             state, start=ship.coordinates, goal=target, ship_energy=ship.energy
         )
-        energy = estimate_energy_cost(state.space, path)
+        # energy = estimate_energy_cost(state.space, path)
 
-        if ship.energy >= energy:
+        if ship.can_move():
             ship.task = GatherEnergy()
             ship.action_queue = path_to_actions(path)
             add_bunching_penalty(score_map, target)
