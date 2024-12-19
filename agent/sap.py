@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.signal import convolve2d
 
-from .base import log, Global, SPACE_SIZE
+from .base import log, Global, SPACE_SIZE, chebyshev_distance
 from .path import Action, ActionType
 from .state import State
 from .tasks import HarvestTask, GatherEnergy
@@ -14,10 +14,12 @@ def sap(state: State):
         (SPACE_SIZE + 2 * sap_range, SPACE_SIZE + 2 * sap_range), dtype=np.float32
     )
 
+    opp_ship_to_energy = {}
     for opp_ship in state.opp_fleet:
         if opp_ship.energy >= 0:
             x, y = opp_ship.coordinates
             opp_ships_array[y + sap_range][x + sap_range] += 1
+            opp_ship_to_energy[opp_ship] = opp_ship.energy
 
     for ship in state.fleet:
         if not ship.can_sap():
@@ -51,13 +53,32 @@ def sap(state: State):
                 continue
 
         sap_direction = np.where(local_opp_ships_array == max_score)
-        dx = sap_direction[1][0] - sap_range
-        dy = sap_direction[0][0] - sap_range
+        dx = int(sap_direction[1][0] - sap_range)
+        dy = int(sap_direction[0][0] - sap_range)
 
         # log(ship, max_score, dx, dy)
         # log(local_opp_ships_array)
 
         ship.action_queue = [Action(ActionType.sap, dx, dy)]
+
+        # log(f"add sap {(x + dx, y + dy)}")
+
+        # preventing overkill
+        for opp_ship in state.opp_fleet:
+            if opp_ship in opp_ship_to_energy and opp_ship_to_energy[opp_ship] >= 0:
+                d = chebyshev_distance(opp_ship.coordinates, (x + dx, y + dy))
+                # log(f"Opp {opp_ship} distance = {d}")
+                if d == 0:
+                    opp_ship_to_energy[opp_ship] -= Global.UNIT_SAP_COST
+                elif d == 1:
+                    opp_ship_to_energy[opp_ship] -= (
+                        Global.UNIT_SAP_COST * Global.UNIT_SAP_DROPOFF_FACTOR
+                    )
+
+                if opp_ship_to_energy[opp_ship] < 0:
+                    # log(f"Opp ship killed")
+                    opp_x, opp_y = opp_ship.coordinates
+                    opp_ships_array[opp_y + sap_range][opp_x + sap_range] -= 1
 
 
 def get_sap_kernel():
