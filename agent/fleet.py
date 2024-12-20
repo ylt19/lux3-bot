@@ -19,6 +19,8 @@ class Fleet:
         self.points: int = 0
         self.ships = [Ship(unit_id) for unit_id in range(Global.MAX_UNITS)]
 
+        self.vision = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int8)
+
     def __repr__(self):
         return f"Fleet({self.team_id})"
 
@@ -39,7 +41,7 @@ class Fleet:
             if visible:
                 ship.node = space.get_node(*position)
                 ship.energy = int(energy)
-                ship.steps_since_last_viewed = 0
+                ship.steps_since_last_seen = 0
             else:
                 if (
                     ship.node is not None
@@ -47,13 +49,16 @@ class Fleet:
                     and space.get_node(*ship.coordinates).is_visible
                 ):
                     # The ship is out of sight of our sensors
-                    ship.steps_since_last_viewed += 1
+                    ship.steps_since_last_seen += 1
                     ship.task = None
                     ship.action_queue = []
                 else:
                     ship.clear()
 
             ship.action_queue = []
+            ship.update_vision()
+
+        self.update_vision()
 
     def clear(self):
         self.points = 0
@@ -74,16 +79,24 @@ class Fleet:
                 ] = 1
         return mask
 
+    def update_vision(self):
+        self.vision[:] = 0
+
+        for ship in self.ships:
+            self.vision += ship.vision
+
 
 class Ship:
     def __init__(self, unit_id: int):
         self.unit_id = unit_id
         self.energy = 0
         self.node: Node | None = None
-        self.steps_since_last_viewed: int = 0
+        self.steps_since_last_seen: int = 0
 
         self.task = None
         self.action_queue: list[Action] = []
+
+        self.vision = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int8)
 
     def __repr__(self):
         return (
@@ -92,7 +105,7 @@ class Ship:
 
     @property
     def is_visible(self) -> True:
-        return self.node is not None and self.steps_since_last_viewed == 0
+        return self.node is not None and self.steps_since_last_seen == 0
 
     @property
     def coordinates(self):
@@ -108,7 +121,7 @@ class Ship:
         self.node = None
         self.task = None
         self.action_queue = []
-        self.steps_since_last_viewed = 0
+        self.steps_since_last_seen = 0
 
     def can_move(self) -> bool:
         return self.node is not None and self.energy >= Global.UNIT_MOVE_COST
@@ -120,6 +133,20 @@ class Ship:
         if not self.can_move() or not self.action_queue:
             return self.coordinates
         return apply_action(*self.coordinates, action=self.action_queue[0].type)
+
+    def update_vision(self):
+        self.vision[:] = 0
+
+        if not self.is_visible:
+            return
+
+        x, y = self.coordinates
+        r = Global.UNIT_SENSOR_RANGE
+
+        self.vision[
+            max(0, y - r) : min(SPACE_SIZE, y + r + 1),
+            max(0, x - r) : min(SPACE_SIZE, x + r + 1),
+        ] = 1
 
 
 def find_hidden_constants(previous_state, state):
