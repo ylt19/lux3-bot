@@ -134,44 +134,7 @@ class Space:
     ):
         self.move_obstacles(global_step)
         self._update_map(obs)
-
-        for relic_id, (mask, xy) in enumerate(
-            zip(obs["relic_nodes_mask"], obs["relic_nodes"])
-        ):
-            if mask:
-                self._update_relic_status(*xy, status=True)
-                self._relic_id_to_node[relic_id] = self.get_node(*xy)
-
-        all_relics_found = True
-        all_rewards_found = True
-        for node in self:
-            if node.is_visible and not node.explored_for_relic:
-                self._update_relic_status(*node.coordinates, status=False)
-
-            if not node.explored_for_relic:
-                all_relics_found = False
-
-            if not node.explored_for_reward:
-                all_rewards_found = False
-
-        Global.ALL_RELICS_FOUND = all_relics_found
-        Global.ALL_REWARDS_FOUND = all_rewards_found
-
-        if not Global.ALL_RELICS_FOUND:
-            if self.num_relics_found == len(obs["relic_nodes_mask"]):
-                # all relics found, mark all nodes as explored for relics
-                Global.ALL_RELICS_FOUND = True
-                for node in self:
-                    if not node.explored_for_relic:
-                        self._update_relic_status(*node.coordinates, status=False)
-
-        if not Global.ALL_REWARDS_FOUND:
-            self._update_reward_status_from_relics_distribution()
-            self._update_reward_results(obs, team_id, team_reward, full_visibility=True)
-            self._update_reward_results(
-                obs, opp_team_id, opp_team_reward, full_visibility=False
-            )
-            self._update_reward_status_from_reward_results()
+        self._update_relic_map(obs, team_id, team_reward, opp_team_id, opp_team_reward)
 
     def _update_map(self, obs):
         sensor_mask = obs["sensor_mask"]
@@ -261,6 +224,47 @@ class Space:
                 # The energy field has changed
                 # I cannot predict what the new energy field will be like.
                 node.energy = None
+
+    def _update_relic_map(
+        self, obs, team_id, team_reward, opp_team_id, opp_team_reward
+    ):
+        for relic_id, (mask, xy) in enumerate(
+            zip(obs["relic_nodes_mask"], obs["relic_nodes"])
+        ):
+            if mask:
+                self._update_relic_status(*xy, status=True)
+                self._relic_id_to_node[relic_id] = self.get_node(*xy)
+
+        all_relics_found = True
+        all_rewards_found = True
+        for node in self:
+            if node.is_visible and not node.explored_for_relic:
+                self._update_relic_status(*node.coordinates, status=False)
+
+            if not node.explored_for_relic:
+                all_relics_found = False
+
+            if not node.explored_for_reward:
+                all_rewards_found = False
+
+        Global.ALL_RELICS_FOUND = all_relics_found
+        Global.ALL_REWARDS_FOUND = all_rewards_found
+
+        if not Global.ALL_RELICS_FOUND:
+            if self.num_relics_found == len(obs["relic_nodes_mask"]):
+                # all relics found, mark all nodes as explored for relics
+                Global.ALL_RELICS_FOUND = True
+                for node in self:
+                    if not node.explored_for_relic:
+                        self._update_relic_status(*node.coordinates, status=False)
+
+        if not Global.ALL_REWARDS_FOUND:
+            self._update_reward_status_from_relics_distribution()
+            self._update_reward_results(obs, team_id, team_reward, full_visibility=True)
+            self._update_reward_results(
+                obs, opp_team_id, opp_team_reward, full_visibility=False
+            )
+            self._update_reward_status_from_reward_results()
 
     def move_obstacles(self, global_step):
         if (
