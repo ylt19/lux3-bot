@@ -462,6 +462,42 @@ class Space:
                 self.get_node(x, y).type = node_type
             return self
 
+    def create_relic_exploration_statuses_array(self):
+        """
+        returns an array with relic exploration statuses:
+            1 - explored for relic
+            0 - not explored
+        """
+
+        a = np.ones((SPACE_SIZE, SPACE_SIZE), dtype=np.int16)
+        if Global.ALL_RELICS_FOUND:
+            return a
+
+        for node in self:
+            if not node.explored_for_relic:
+                x, y = node.coordinates
+                a[y, x] = 0
+
+        return a
+
+    def create_reward_exploration_statuses_array(self):
+        """
+        returns an array with reward exploration statuses:
+            1 - explored for reward
+            0 - not explored
+        """
+
+        a = np.ones((SPACE_SIZE, SPACE_SIZE), dtype=np.int16)
+        if Global.ALL_REWARDS_FOUND:
+            return a
+
+        for node in self:
+            if not node.explored_for_reward:
+                x, y = node.coordinates
+                a[y, x] = 0
+
+        return a
+
 
 def _get_obstacle_movement_direction(space, obs):
     sensor_mask = obs["sensor_mask"]
