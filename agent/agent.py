@@ -1,11 +1,8 @@
 from .base import Global, log
 from .state import State
 
-from .sap import sap
 from .fleet import find_hidden_constants
-from .harvest import harvest
-from .explore import explore
-from .gather_energy import gather_energy
+from .tasks import apply_tasks
 
 
 class Agent:
@@ -23,31 +20,30 @@ class Agent:
         self.previous_state = self.state.copy()
 
     def act(self, step: int, obs, remaining_overage_time: int = 60):
-        self.state.update(obs)
+        state = self.state
+
+        state.update(obs)
 
         log(
-            f"start step {self.state.global_step:>3}"
-            f", match {self.state.match_number}:{self.state.match_step:>3}"
+            f"start step {state.global_step:>3}"
+            f", match {state.match_number}:{state.match_step:>3}"
             f", wins {Global.NUM_WINS}/{Global.NUM_COMPLETED_MATCHES}"
+            f", points {state.fleet.points}:{state.opp_fleet.points}"
         )
 
-        if self.state.match_step == 0:
-            self.previous_state = self.state.copy()
+        if state.match_step == 0:
+            self.previous_state = state.copy()
 
-        find_hidden_constants(self.previous_state, self.state)
+        find_hidden_constants(self.previous_state, state)
 
-        # self.state.show_visible_map()
-        # self.state.show_visible_energy_field()
-        # self.state.show_explored_map()
-        # self.state.show_explored_energy_field()
-        # self.state.show_exploration_info()
+        # state.show_visible_map()
+        # state.show_visible_energy_field()
+        # state.show_explored_map()
+        # state.show_explored_energy_field()
+        # state.show_exploration_map()
 
-        explore(self.state)
-        harvest(self.state)
-        sap(self.state)
-        gather_energy(self.state)
+        apply_tasks(state)
+        # state.show_tasks(show_path=False)
 
-        # self.state.show_tasks(show_path=False)
-
-        self.previous_state = self.state.copy()
-        return self.state.create_actions_array()
+        self.previous_state = state.copy()
+        return state.create_actions_array()

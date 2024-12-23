@@ -80,10 +80,14 @@ class Action:
 
 
 def path_to_actions(path):
-    actions = []
-    if not path:
-        return actions
 
+    if len(path) == 0:
+        return []
+
+    if len(path) == 1:
+        return [Action(ActionType.center)]
+
+    actions = []
     last_position = path[0]
     for x, y in path[1:]:
         direction = ActionType.from_coordinates(last_position, (x, y))

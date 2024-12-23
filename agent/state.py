@@ -1,8 +1,8 @@
-from copy import deepcopy
+from copy import copy, deepcopy
 
 import numpy as np
 from collections import defaultdict
-from pathfinding import Grid, ReservationTable
+from pathfinding import Grid, ReservationTable, ResumableDijkstra
 from pathfinding.visualization import animate_grid
 
 from .base import (
@@ -34,11 +34,13 @@ class State:
         self._energy_grid = None
         self._obstacle_grid = None
         self._reservation_table = None
+        self._resumable_dijkstra = None
 
     def update(self, obs):
         self._energy_grid = None
         self._obstacle_grid = None
         self._reservation_table = None
+        self._resumable_dijkstra = None
 
         if obs["steps"] > 0:
             self._update_step_counters()
@@ -167,14 +169,17 @@ class State:
         log("Explored energy field:")
         show_energy_field(self.space, only_visible=False)
 
-    def show_exploration_info(self):
-        log("Exploration info:")
-        show_exploration_info(self.space)
+    def show_exploration_map(self):
+        log("Exploration map:")
+        show_exploration_map(self.space)
 
     def show_tasks(self, show_path=False):
         log("Tasks:")
         for ship in self.fleet:
             m = f" - {ship} : {ship.task}"
+            if ship.action_queue:
+                a = ship.action_queue[0]
+                m += f", action={a.type}"
             if show_path:
                 m += f", {ship.path()}"
             log(m)
@@ -203,13 +208,13 @@ class State:
     @property
     def energy_grid(self):
         if self._energy_grid is None:
-            self._energy_grid = create_energy_grid(self)
+            self._energy_grid = create_energy_grid(self.space)
         return self._energy_grid
 
     @property
     def obstacle_grid(self):
         if self._obstacle_grid is None:
-            self._obstacle_grid = create_grid_with_obstacles(self)
+            self._obstacle_grid = create_grid_with_obstacles(self.space)
         return self._obstacle_grid
 
     @property
@@ -220,6 +225,31 @@ class State:
             add_dynamic_environment(self._reservation_table, self)
 
         return self._reservation_table
+
+    def get_resumable_dijkstra(self, unit_id, team_id=None):
+        if self._resumable_dijkstra is None:
+            self._resumable_dijkstra = [
+                [None for _ in range(Global.MAX_UNITS)],
+                [None for _ in range(Global.MAX_UNITS)],
+            ]
+
+        if team_id is None:
+            team_id = self.team_id
+
+        unit_to_rs = self._resumable_dijkstra[team_id]
+        if unit_id in unit_to_rs:
+            return unit_to_rs[unit_id]
+
+        fleet = self.fleet if team_id == self.team_id else self.opp_fleet
+        ship = fleet.ships[unit_id]
+        if ship.node is None:
+            return
+
+        grid = copy(self.obstacle_grid)
+        grid.remove_obstacle(ship.coordinates)
+        rs = ResumableDijkstra(grid, ship.coordinates)
+        unit_to_rs[unit_id] = rs
+        return rs
 
 
 def add_dynamic_environment(rt, state):
@@ -264,9 +294,9 @@ def add_dynamic_environment(rt, state):
     return rt
 
 
-def create_energy_grid(state):
+def create_energy_grid(space):
     weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.int16)
-    for node in state.space:
+    for node in space:
 
         node_energy = node.energy
         if node_energy is None:
@@ -279,9 +309,9 @@ def create_energy_grid(state):
     return Grid(weights, pause_action_cost="node.weight")
 
 
-def create_grid_with_obstacles(state):
+def create_grid_with_obstacles(space):
     weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.int16)
-    for node in state.space:
+    for node in space:
 
         if not node.is_walkable:
             w = -1
@@ -381,7 +411,7 @@ def show_energy_field(space, only_visible=True):
     log(str_grid)
 
 
-def show_exploration_info(space):
+def show_exploration_map(space):
     log(
         f"all relics found: {Global.ALL_RELICS_FOUND}, "
         f"all rewards found: {Global.ALL_REWARDS_FOUND}"

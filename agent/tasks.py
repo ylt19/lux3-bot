@@ -1,32 +1,47 @@
+from .base import log, Global
 from .space import Node
+from .exploration import VoidSeeker, RelicFinder
+from .exploitation import VoidSinger
 
 
-class Task:
-    def __repr__(self):
-        return self.__class__.__name__
+def apply_tasks(state):
+
+    for ship in state.fleet:
+        if ship.task is not None and ship.task.completed(state):
+            ship.task = None
+
+    tasks = generate_tasks(state)
+
+    scores = []
+    for ship in state.fleet:
+        if ship.task is None:
+            for task in tasks:
+                score = task.evaluate(state, ship)
+                if score <= 0:
+                    continue
+                scores.append({"ship": ship, "task": task, "score": score})
+
+    scores = sorted(scores, key=lambda x: -x["score"])
+
+    picked_tasks = set()
+
+    for d in scores:
+        ship = d["ship"]
+        task = d["task"]
+        if ship.task is not None or task in picked_tasks:
+            continue
+
+        ship.task = task
+        picked_tasks.add(task)
+
+    for ship in state.fleet:
+        if ship.task is not None:
+            ship.task.apply(state, ship)
 
 
-class FindRelicNodes(Task):
-    pass
-
-
-class FindRewardNodes(Task):
-    def __init__(self, node: Node):
-        assert node.relic
-        self.coordinates = node.x, node.y
-
-    def __repr__(self):
-        return f"FindRewardNodes{self.coordinates}"
-
-
-class HarvestTask(Task):
-    def __init__(self, node: Node):
-        assert node.reward
-        self.coordinates = node.x, node.y
-
-    def __repr__(self):
-        return f"HarvestTask{self.coordinates}"
-
-
-class GatherEnergy(Task):
-    pass
+def generate_tasks(state):
+    return [
+        *RelicFinder.generate_tasks(state),
+        *VoidSeeker.generate_tasks(state),
+        *VoidSinger.generate_tasks(state),
+    ]

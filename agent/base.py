@@ -69,6 +69,7 @@ class Colors:
 
 
 SPACE_SIZE = Global.SPACE_SIZE
+SECTOR_SIZE = int((SPACE_SIZE**2 + SPACE_SIZE) / 2)  # 300
 
 
 def log(*args, level=3):
@@ -142,3 +143,20 @@ def warp_int(x):
 
 def warp_point(x, y):
     return warp_int(x), warp_int(y)
+
+
+class Task:
+    def __init__(self, target):
+        self.target = target
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.target})"
+
+    def completed(self, state):
+        return False
+
+    def evaluate(self, state, ship):
+        return 0
+
+    def apply(self, state, ship):
+        pass
