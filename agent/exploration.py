@@ -60,11 +60,13 @@ class RelicFinder(Task):
 
 class VoidSeeker(Task):
 
-    def __init__(self, target):
+    def __init__(self, relic_node, target=None):
+        self.relic_node = relic_node
         super().__init__(target)
 
     def __repr__(self):
-        return f"{self.__class__.__name__}{self.target.coordinates}"
+        target = self.target.coordinates if self.target else None
+        return f"{self.__class__.__name__}(relic={self.relic_node.coordinates}, target={target})"
 
     def completed(self, state):
         return is_relic_fully_explored(state, self.target)
@@ -74,37 +76,34 @@ class VoidSeeker(Task):
         relic_nodes = set(get_unexplored_relics(state))
         for ship in state.fleet:
             if isinstance(ship.task, VoidSeeker):
-                target = ship.task.target
-                if target in relic_nodes:
-                    relic_nodes.remove(target)
+                relic_node = ship.task.relic_node
+                if relic_node in relic_nodes:
+                    relic_nodes.remove(relic_node)
 
         tasks = []
         for node in relic_nodes:
-            tasks.append(VoidSeeker(node))
+            tasks.append(VoidSeeker(relic_node=node))
 
         return tasks
 
     def evaluate(self, state, ship):
         if not ship.can_move():
-            if ship.node == self.target:
-                return 1000
-            else:
-                return 0
+            return 0
 
         rs = state.get_resumable_dijkstra(ship.unit_id)
 
-        closest_node, min_distance = None, float("inf")
-        for node in get_unexplored_for_reward_nodes(state, self.target):
+        target_node, min_distance = None, float("inf")
+        for node in get_unexplored_for_reward_nodes(state, self.relic_node):
             grid_distance = rs.distance(node.coordinates)
             if grid_distance < min_distance:
-                closest_node, min_distance = node, grid_distance
+                target_node, min_distance = node, grid_distance
 
-        if closest_node is None:
+        if target_node is None:
             return 0
 
-        path = rs.find_path(self.target.coordinates)
+        path = rs.find_path(target_node.coordinates)
         energy_needed = estimate_energy_cost(state.space, path)
-        grid_distance = rs.distance(self.target.coordinates)
+        grid_distance = rs.distance(target_node.coordinates)
 
         energy_remain = ship.energy - energy_needed
 
@@ -117,7 +116,7 @@ class VoidSeeker(Task):
         rs = state.get_resumable_dijkstra(ship.unit_id)
 
         target_node, min_distance = None, float("inf")
-        for node in get_unexplored_for_reward_nodes(state, self.target):
+        for node in get_unexplored_for_reward_nodes(state, self.relic_node):
             grid_distance = rs.distance(node.coordinates)
             if grid_distance < min_distance:
                 target_node, min_distance = node, grid_distance
@@ -156,6 +155,7 @@ class VoidSeeker(Task):
             ship_energy=ship.energy,
         )
 
+        self.target = target_node
         ship.action_queue = path_to_actions(path)
 
 
