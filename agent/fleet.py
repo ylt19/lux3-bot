@@ -99,9 +99,8 @@ class Ship:
         self.vision = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int8)
 
     def __repr__(self):
-        return (
-            f"Ship({self.unit_id}, node={self.node.coordinates}, energy={self.energy})"
-        )
+        position = self.node.coordinates if self.node else None
+        return f"Ship({self.unit_id}, node={position}, energy={self.energy})"
 
     @property
     def is_visible(self) -> True:
