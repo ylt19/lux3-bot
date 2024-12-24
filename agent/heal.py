@@ -12,7 +12,7 @@ from .path import (
 )
 from .space import NodeType
 from .state import State
-from .tasks import GatherEnergy, HarvestTask
+from .base import Task
 
 REWARD_RADIUS = 4
 REWARD_NUMBER_RELAXATION = 3
@@ -31,33 +31,27 @@ ENERGY_MULTIPLIER = 0.25
 BUNCHING_PENALTY = 2
 
 
-def gather_energy(state: State):
+class Heal(Task):
 
-    free_ships = []
-    busy_ships = []
-    for ship in state.fleet:
-        if ship.task and not isinstance(ship.task, GatherEnergy):
-            busy_ships.append(ship)
-        else:
-            free_ships.append(ship)
+    def __repr__(self):
+        return f"{self.__class__.__name__}{self.target.coordinates}"
 
-    if not free_ships:
-        return
+    def completed(self, state):
+        return True
 
-    score_map = estimate_gather_energy_score_map(state)
+    def apply(self, state, ship):
+        score_map = estimate_gather_energy_score_map(state)
 
-    for ship in busy_ships:
-        if isinstance(ship.task, HarvestTask):
-            add_bunching_penalty(score_map, ship.task.coordinates)
+        for other_ship in state.fleet:
+            if other_ship != ship and other_ship.task is not None:
+                add_bunching_penalty(score_map, other_ship.task.target.coordinates)
 
-    for ship in free_ships:
         available_nodes = get_reachable_nodes(state, ship.coordinates)
         targets = get_positions_with_max_energy(available_nodes, score_map)
 
         target, _ = find_closest_target(state, ship.coordinates, targets)
         if not target:
-            ship.task = None
-            continue
+            return
 
         path = find_path_in_dynamic_environment(
             state, start=ship.coordinates, goal=target, ship_energy=ship.energy
@@ -65,11 +59,13 @@ def gather_energy(state: State):
         # energy = estimate_energy_cost(state.space, path)
 
         if ship.can_move():
-            ship.task = GatherEnergy()
+            ship.task = self
+            ship.task.target = state.space.get_node(*target)
             ship.action_queue = path_to_actions(path)
-            add_bunching_penalty(score_map, target)
-        else:
-            ship.task = None
+
+
+def heal(state: State, ship):
+    Heal(None).apply(state, ship)
 
 
 def get_positions_with_max_energy(nodes, score_map):

@@ -1,7 +1,7 @@
 from .base import log, Global
-from .space import Node
 from .exploration import VoidSeeker, RelicFinder
 from .exploitation import VoidSinger
+from .heal import heal
 
 
 def apply_tasks(state):
@@ -37,6 +37,10 @@ def apply_tasks(state):
     for ship in state.fleet:
         if ship.task is not None:
             ship.task.apply(state, ship)
+
+    for ship in state.fleet:
+        if ship.task is None:
+            heal(state, ship)
 
 
 def generate_tasks(state):
