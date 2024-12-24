@@ -2,6 +2,18 @@
 
 This directory contains code that has been copied from [w9PcJLyb/pathfinding](https://github.com/w9PcJLyb/pathfinding).
 
+### Compiling
+
+1. Install Cython:
+    ```bash
+    pip install cython
+    ```
+
+2. Build the Cython extensions:
+    ```bash
+    python setup.py build_ext --inplace
+    ```
+
 ### Modifications
 The following changes have been made to the copied code:
 
@@ -30,4 +42,5 @@ To enable new option, use the keyword "node.weight" like this:
     Сan be used in the SpaceTimeAStar algorithm when searching for the shortest path in a dynamic environment where these dynamics can be predicted.
 
 ### License
-The code in this directory is under the Apache License 2.0, as originally licensed in w9PcJLyb/pathfinding. For more details, please refer to the LICENSE file in w9PcJLyb/pathfinding https://github.com/w9PcJLyb/pathfinding/blob/main/LICENSE.
+The code in this directory is under the Apache License 2.0, as originally licensed in w9PcJLyb/pathfinding.
+For more details, please refer to the [LICENSE file](https://github.com/w9PcJLyb/pathfinding/blob/main/LICENSE) in w9PcJLyb/pathfinding.

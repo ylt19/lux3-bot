@@ -4,8 +4,8 @@ from Cython.Build import cythonize
 
 ext_modules = [
     Extension(
-        name="pathfinding.cpf",
-        sources=["pathfinding/wrapper.pyx"],
+        name="cpf",
+        sources=["wrapper.pyx"],
         language="c++",
         extra_compile_args=["-std=c++17"],
     )
