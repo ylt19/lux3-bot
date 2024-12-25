@@ -2,6 +2,7 @@ from .base import log, Global
 from .exploration import VoidSeeker, RelicFinder
 from .exploitation import VoidSinger
 from .heal import heal
+from .sap import sap
 
 
 def apply_tasks(state):
@@ -41,6 +42,8 @@ def apply_tasks(state):
     for ship in state.fleet:
         if ship.task is None:
             heal(state, ship)
+
+    sap(state)
 
 
 def generate_tasks(state):

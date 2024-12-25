@@ -4,7 +4,6 @@ from scipy.signal import convolve2d
 from .base import log, Global, SPACE_SIZE, chebyshev_distance
 from .path import Action, ActionType
 from .state import State
-from .tasks import HarvestTask, GatherEnergy
 
 
 def sap(state: State):
@@ -23,9 +22,6 @@ def sap(state: State):
 
     for ship in state.fleet:
         if not ship.can_sap():
-            continue
-
-        if not isinstance(ship.task, (type(None), HarvestTask, GatherEnergy)):
             continue
 
         x, y = ship.coordinates
