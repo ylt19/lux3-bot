@@ -36,7 +36,7 @@ class Heal(Task):
     def __repr__(self):
         return f"{self.__class__.__name__}{self.target.coordinates}"
 
-    def completed(self, state):
+    def completed(self, state, ship):
         return True
 
     def apply(self, state, ship):
@@ -44,7 +44,13 @@ class Heal(Task):
 
         for other_ship in state.fleet:
             if other_ship != ship and other_ship.task is not None:
-                add_bunching_penalty(score_map, other_ship.task.target.coordinates)
+                if other_ship.task.target is None:
+                    log(
+                        f"{other_ship} has task {other_ship.task} without target",
+                        level=1,
+                    )
+                else:
+                    add_bunching_penalty(score_map, other_ship.task.target.coordinates)
 
         available_nodes = get_reachable_nodes(state, ship.coordinates)
         targets = get_positions_with_max_energy(available_nodes, score_map)

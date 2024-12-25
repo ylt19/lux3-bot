@@ -3,7 +3,7 @@ import sys
 
 
 class Global:
-    VERBOSITY = 2
+    VERBOSITY = 3
     if os.path.exists("/kaggle_simulations"):
         VERBOSITY = -1
 
@@ -72,6 +72,7 @@ class Global:
         VOID_SINGER_INIT_SCORE = 800
         VOID_SINGER_PATH_LENGTH_MULTIPLIER = -5
         VOID_SINGER_ENERGY_COST_MULTIPLIER = -0.2
+        VOID_SINGER_NODE_ENERGY_MULTIPLIER = 1
 
     HIDDEN_NODE_ENERGY = Params.HIDDEN_NODE_ENERGY
 
@@ -169,7 +170,7 @@ class Task:
     def __repr__(self):
         return f"{self.__class__.__name__}({self.target})"
 
-    def completed(self, state):
+    def completed(self, state, ship):
         return False
 
     def evaluate(self, state, ship):

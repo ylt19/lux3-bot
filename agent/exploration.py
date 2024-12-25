@@ -21,7 +21,7 @@ class RelicFinder(Task):
     def __repr__(self):
         return f"{self.__class__.__name__}{self.target.coordinates}"
 
-    def completed(self, state):
+    def completed(self, state, ship):
         return True  # self.target.explored_for_relic
 
     @classmethod
@@ -73,7 +73,9 @@ class VoidSeeker(Task):
         target = self.target.coordinates if self.target else None
         return f"{self.__class__.__name__}(relic={self.relic_node.coordinates}, target={target})"
 
-    def completed(self, state):
+    def completed(self, state, ship):
+        if not ship.can_move():
+            return True
         return is_relic_fully_explored(state, self.target)
 
     @classmethod

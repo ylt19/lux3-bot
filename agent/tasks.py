@@ -8,7 +8,7 @@ from .sap import sap
 def apply_tasks(state):
 
     for ship in state.fleet:
-        if ship.task is not None and ship.task.completed(state):
+        if ship.task is not None and ship.task.completed(state, ship):
             ship.task = None
 
     tasks = generate_tasks(state)
