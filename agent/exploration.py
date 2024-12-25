@@ -38,12 +38,17 @@ class RelicFinder(Task):
 
         rs = state.get_resumable_dijkstra(ship.unit_id)
         path = rs.find_path(self.target.coordinates)
+        if not path:
+            return 0
+
         energy_needed = estimate_energy_cost(state.space, path)
-        grid_distance = rs.distance(self.target.coordinates)
 
-        energy_remain = ship.energy - energy_needed
-
-        score = 1000 - grid_distance + energy_remain
+        p = Global.Params
+        score = (
+            p.RELIC_FINDER_INIT_SCORE
+            + p.RELIC_FINDER_PATH_LENGTH_MULTIPLIER * len(path)
+            + p.RELIC_FINDER_ENERGY_COST_MULTIPLIER * energy_needed
+        )
 
         return score
 
@@ -102,12 +107,17 @@ class VoidSeeker(Task):
             return 0
 
         path = rs.find_path(target_node.coordinates)
+        if not path:
+            return
+
         energy_needed = estimate_energy_cost(state.space, path)
-        grid_distance = rs.distance(target_node.coordinates)
 
-        energy_remain = ship.energy - energy_needed
-
-        score = 1200 - grid_distance + energy_remain
+        p = Global.Params
+        score = (
+            p.VOID_SEEKER_INIT_SCORE
+            + p.VOID_SEEKER_PATH_LENGTH_MULTIPLIER * len(path)
+            + p.VOID_SEEKER_ENERGY_COST_MULTIPLIER * energy_needed
+        )
 
         return score
 
@@ -124,8 +134,24 @@ class VoidSeeker(Task):
         if not target_node:
             return
 
-        if ship.node == target_node:
-            go_to_known_node = False
+        path = find_path_in_dynamic_environment(
+            state,
+            start=ship.coordinates,
+            goal=target_node.coordinates,
+            ship_energy=ship.energy,
+        )
+
+        if len(path) == 0:
+            return
+
+        if len(path) == 1:
+            next_node = target_node
+        else:
+            next_node = state.space.get_node(*path[1])
+
+        if not next_node.explored_for_reward:
+
+            allowed = True
             for other_ship in state.fleet:
                 if (
                     other_ship == ship
@@ -136,24 +162,33 @@ class VoidSeeker(Task):
 
                 next_position = other_ship.next_position()
                 if not state.space.get_node(*next_position).explored_for_reward:
-                    go_to_known_node = True
+                    # the other ship also have an unexplored node in its path
+                    # we are blocking the ship's path
+                    # it will help generate more useful data in Global.REWARD_RESULTS.
+                    allowed = False
                     break
 
-            if go_to_known_node:
-                log("go_to_known_node")
+            if not allowed:
+                # move to the closest explored node
                 target_node, min_distance = None, float("inf")
                 for node in state.space:
-                    if node.explored_for_reward:
+                    if node.explored_for_reward and node.is_walkable:
                         grid_distance = rs.distance(node.coordinates)
+
+                        # we prefer to find a node with a reward.
+                        if node.reward:
+                            grid_distance -= 0.01
+
                         if grid_distance < min_distance:
                             target_node, min_distance = node, grid_distance
 
-        path = find_path_in_dynamic_environment(
-            state,
-            start=ship.coordinates,
-            goal=target_node.coordinates,
-            ship_energy=ship.energy,
-        )
+                # find a new path
+                path = find_path_in_dynamic_environment(
+                    state,
+                    start=ship.coordinates,
+                    goal=target_node.coordinates,
+                    ship_energy=ship.energy,
+                )
 
         self.target = target_node
         ship.action_queue = path_to_actions(path)

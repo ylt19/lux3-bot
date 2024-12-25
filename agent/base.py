@@ -57,7 +57,23 @@ class Global:
     OBSTACLES_MOVEMENT_STATUS = []
 
     # Others:
-    HIDDEN_NODE_ENERGY = 0
+    class Params:
+        HIDDEN_NODE_ENERGY = 0
+        ENERGY_TO_WEIGHT_BASE = 1.2
+
+        RELIC_FINDER_INIT_SCORE = 1000
+        RELIC_FINDER_PATH_LENGTH_MULTIPLIER = -5
+        RELIC_FINDER_ENERGY_COST_MULTIPLIER = -0.2
+
+        VOID_SEEKER_INIT_SCORE = 1200
+        VOID_SEEKER_PATH_LENGTH_MULTIPLIER = -5
+        VOID_SEEKER_ENERGY_COST_MULTIPLIER = -0.2
+
+        VOID_SINGER_INIT_SCORE = 800
+        VOID_SINGER_PATH_LENGTH_MULTIPLIER = -5
+        VOID_SINGER_ENERGY_COST_MULTIPLIER = -0.2
+
+    HIDDEN_NODE_ENERGY = Params.HIDDEN_NODE_ENERGY
 
 
 class Colors:
@@ -77,10 +93,11 @@ def log(*args, level=3):
     # 2 - Info
     # 3 - Debug
     if level <= Global.VERBOSITY:
+        file = sys.stderr
         if level == 1:
-            print(f"{Colors.red}Error{Colors.endc}:", *args, file=sys.stderr)
+            print(f"{Colors.red}Error{Colors.endc}:", *args, file=file)
         else:
-            print(*args, file=sys.stderr)
+            print(*args, file=file)
 
 
 def is_upper_sector(x, y) -> bool:

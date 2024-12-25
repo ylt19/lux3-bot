@@ -294,15 +294,21 @@ def add_dynamic_environment(rt, state):
     return rt
 
 
+def energy_to_weight(energy):
+    if energy < Global.UNIT_MOVE_COST:
+        return Global.UNIT_MOVE_COST - energy + 1
+    return Global.Params.ENERGY_TO_WEIGHT_BASE ** (Global.UNIT_MOVE_COST - energy)
+
+
 def create_energy_grid(space):
-    weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.int16)
+    weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
     for node in space:
 
         node_energy = node.energy
         if node_energy is None:
             node_energy = Global.HIDDEN_NODE_ENERGY
 
-        w = Global.MAX_ENERGY_PER_TILE + 1 - node_energy
+        w = energy_to_weight(node_energy)
 
         weights[node.y][node.x] = w
 
@@ -310,7 +316,8 @@ def create_energy_grid(space):
 
 
 def create_grid_with_obstacles(space):
-    weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.int16)
+    weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
+
     for node in space:
 
         if not node.is_walkable:
@@ -320,10 +327,10 @@ def create_grid_with_obstacles(space):
             if node_energy is None:
                 node_energy = Global.HIDDEN_NODE_ENERGY
 
-            w = Global.MAX_ENERGY_PER_TILE + 1 - node_energy
+            if node.type == NodeType.nebula:
+                node_energy -= Global.NEBULA_ENERGY_REDUCTION
 
-        if node.type == NodeType.nebula:
-            w += Global.NEBULA_ENERGY_REDUCTION
+            w = energy_to_weight(node_energy)
 
         weights[node.y][node.x] = w
 
