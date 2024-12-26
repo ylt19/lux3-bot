@@ -40,6 +40,8 @@ class RelicFinder(Task):
         path = rs.find_path(self.target.coordinates)
         if not path:
             return 0
+        if len(path) > state.steps_left_in_match():
+            return 0
 
         energy_needed = estimate_energy_cost(state.space, path)
 
@@ -101,6 +103,9 @@ class VoidSeeker(Task):
 
         target_node, min_distance = None, float("inf")
         for node in get_unexplored_for_reward_nodes(state, self.relic_node):
+            path = rs.find_path(node.coordinates)
+            if len(path) > state.steps_left_in_match():
+                continue
             grid_distance = rs.distance(node.coordinates)
             if grid_distance < min_distance:
                 target_node, min_distance = node, grid_distance
