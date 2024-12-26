@@ -134,6 +134,7 @@ class VoidSeeker(Task):
                 target_node, min_distance = node, grid_distance
 
         if not target_node:
+            ship.task = None
             return
 
         path = find_path_in_dynamic_environment(
@@ -144,6 +145,7 @@ class VoidSeeker(Task):
         )
 
         if len(path) == 0:
+            ship.task = None
             return
 
         if len(path) == 1:

@@ -92,6 +92,17 @@ class Node:
     def manhattan_distance(self, other: "Node") -> int:
         return abs(self.x - other.x) + abs(self.y - other.y)
 
+    @property
+    def energy_gain(self):
+        energy = self.energy
+        if energy is None:
+            energy = Global.HIDDEN_NODE_ENERGY
+
+        if self.type == NodeType.nebula:
+            energy -= Global.NEBULA_ENERGY_REDUCTION
+
+        return energy
+
 
 class Space:
     def __init__(self):
