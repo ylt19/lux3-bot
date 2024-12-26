@@ -256,6 +256,9 @@ class State:
         # 1 - if our agent wins
         # -1 - if the opponent wins
         # 0 - unknown
+        if not Global.ALL_REWARDS_FOUND:
+            return 0
+
         our_score = self.fleet.points
         opp_score = self.opp_fleet.points
         max_points_per_turn = len(self.space.reward_nodes)
