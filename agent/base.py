@@ -15,6 +15,7 @@ class Global:
     MIN_ENERGY_PER_TILE = -20
     MAX_ENERGY_PER_TILE = 20
     MAX_STEPS_IN_MATCH = 100
+    NUM_MATCHES_IN_GAME = 5
     UNIT_MOVE_COST = 1  # OPTIONS: list(range(1, 6))
     UNIT_SAP_COST = 30  # OPTIONS: list(range(30, 51))
     UNIT_SAP_RANGE = 3  # OPTIONS: list(range(3, 8))

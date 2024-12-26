@@ -251,6 +251,57 @@ class State:
         unit_to_rs[unit_id] = rs
         return rs
 
+    def get_match_status(self):
+        # returns:
+        # 1 - if our agent wins
+        # -1 - if the opponent wins
+        # 0 - unknown
+        our_score = self.fleet.points
+        opp_score = self.opp_fleet.points
+        max_points_per_turn = len(self.space.reward_nodes)
+        num_turns_left = self.steps_left_in_match()
+        max_points_to_gain = max_points_per_turn * num_turns_left
+
+        if our_score > opp_score + max_points_to_gain:
+            return 1
+
+        if opp_score > our_score + max_points_to_gain:
+            return -1
+
+        return 0
+
+    def is_match_over(self):
+        return self.get_match_status() != 0
+
+    def get_game_status(self):
+        # returns:
+        # 1 - if our agent wins
+        # -1 - if the opponent wins
+        # 0 - unknown
+
+        match_status = self.get_match_status()
+
+        num_wins = Global.NUM_WINS
+        num_losses = Global.NUM_COMPLETED_MATCHES - num_wins
+
+        if match_status == 1:
+            num_wins += 1
+        elif match_status == -1:
+            num_losses += 1
+
+        num_wins_to_win = int(Global.NUM_MATCHES_IN_GAME / 2) + 1
+
+        if num_wins >= num_wins_to_win:
+            return 1
+
+        if num_losses >= num_wins_to_win:
+            return -1
+
+        return 0
+
+    def is_game_over(self):
+        return self.get_game_status() != 0
+
 
 def add_dynamic_environment(rt, state):
     shift = Global.OBSTACLE_MOVEMENT_DIRECTION
