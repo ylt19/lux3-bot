@@ -28,7 +28,8 @@ class Agent:
             f"start step {state.global_step:>3}"
             f", match {state.match_number}:{state.match_step:>3}"
             f", wins {Global.NUM_WINS}/{Global.NUM_COMPLETED_MATCHES}"
-            f", points {state.fleet.points}:{state.opp_fleet.points}"
+            f", points {state.fleet.points:>3}:{state.opp_fleet.points:>3}"
+            f", status {state.get_game_status():>2}:{state.get_match_status():>2}"
         )
 
         if state.match_step == 0:
