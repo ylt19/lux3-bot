@@ -1,14 +1,24 @@
 from .base import log, Global
 from .exploration import VoidSeeker, RelicFinder
 from .exploitation import VoidSinger
-from .heal import heal
+from .heal import Heal
 from .sap import sap
 
 
 def apply_tasks(state):
 
     for ship in state.fleet:
-        if ship.task is not None and ship.task.completed(state, ship):
+        task = ship.task
+        if task is None:
+            continue
+
+        if task.completed(state, ship):
+            ship.task = None
+            continue
+
+        if task.apply(state, ship):
+            ship.task = task
+        else:
             ship.task = None
 
     tasks = generate_tasks(state)
@@ -17,6 +27,8 @@ def apply_tasks(state):
     for ship in state.fleet:
         if ship.task is None:
             for task in tasks:
+                if task.ship and task.ship != ship:
+                    continue
                 score = task.evaluate(state, ship)
                 if score <= 0:
                     continue
@@ -24,24 +36,21 @@ def apply_tasks(state):
 
     scores = sorted(scores, key=lambda x: -x["score"])
 
-    picked_tasks = set()
+    tasks_closed = set()
+    ships_closed = set()
 
     for d in scores:
         ship = d["ship"]
         task = d["task"]
-        if ship.task is not None or task in picked_tasks:
+
+        if ship in ships_closed or task in tasks_closed:
             continue
 
-        ship.task = task
-        picked_tasks.add(task)
+        if task.apply(state, ship):
+            ship.task = task
 
-    for ship in state.fleet:
-        if ship.task is not None:
-            ship.task.apply(state, ship)
-
-    for ship in state.fleet:
-        if ship.task is None:
-            heal(state, ship)
+            ships_closed.add(ship)
+            tasks_closed.add(task)
 
     sap(state)
 
@@ -51,4 +60,5 @@ def generate_tasks(state):
         *RelicFinder.generate_tasks(state),
         *VoidSeeker.generate_tasks(state),
         *VoidSinger.generate_tasks(state),
+        *Heal.generate_tasks(state),
     ]

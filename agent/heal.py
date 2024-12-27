@@ -1,17 +1,22 @@
 import numpy as np
 from scipy.ndimage import convolve
 
-from .base import log, Global, SPACE_SIZE, is_inside
+from .base import (
+    log,
+    Global,
+    SPACE_SIZE,
+    is_inside,
+    manhattan_distance,
+    get_spawn_location,
+)
 from .path import (
     DIRECTIONS,
     path_to_actions,
     get_reachable_nodes,
     find_closest_target,
-    estimate_energy_cost,
     find_path_in_dynamic_environment,
 )
 from .space import NodeType
-from .state import State
 from .base import Task
 
 REWARD_RADIUS = 4
@@ -33,13 +38,30 @@ BUNCHING_PENALTY = 2
 
 class Heal(Task):
 
+    def __init__(self, ship, target=None):
+        super().__init__(target)
+        self.ship = ship
+
     def __repr__(self):
-        return f"{self.__class__.__name__}{self.target.coordinates}"
+        if self.target is None:
+            return self.__class__.__name__
+        else:
+            return f"{self.__class__.__name__}{self.target.coordinates}"
 
     def completed(self, state, ship):
         return True
 
-    def apply(self, state, ship):
+    @classmethod
+    def generate_tasks(cls, state):
+        return [Heal(ship) for ship in state.fleet]
+
+    def evaluate(self, state, _):
+        ship = self.ship
+
+        opp_spawn_location = get_spawn_location(state.opp_team_id)
+        opp_spawn_distance = manhattan_distance(opp_spawn_location, ship.coordinates)
+        ship_energy = ship.energy
+
         score_map = estimate_gather_energy_score_map(state)
 
         for other_ship in state.fleet:
@@ -57,21 +79,33 @@ class Heal(Task):
 
         target, _ = find_closest_target(state, ship.coordinates, targets)
         if not target:
-            return
+            return 0
 
-        path = find_path_in_dynamic_environment(
-            state, start=ship.coordinates, goal=target, ship_energy=ship.energy
+        if not ship.can_move() and target != ship.coordinates:
+            return 0
+
+        self.target = state.space.get_node(*target)
+
+        p = Global.Params
+        score = (
+            p.HEAL_INIT_SCORE
+            + opp_spawn_distance * p.HEAL_OPP_SPAWN_DISTANCE_MULTIPLIER
+            + ship_energy * p.HEAL_SHIP_ENERGY_MULTIPLIER
         )
-        # energy = estimate_energy_cost(state.space, path)
 
-        if ship.can_move():
-            ship.task = self
-            ship.task.target = state.space.get_node(*target)
-            ship.action_queue = path_to_actions(path)
+        return score
 
+    def apply(self, state, _):
+        ship = self.ship
+        path = find_path_in_dynamic_environment(
+            state,
+            start=ship.coordinates,
+            goal=self.target.coordinates,
+            ship_energy=ship.energy,
+        )
 
-def heal(state: State, ship):
-    Heal(None).apply(state, ship)
+        ship.action_queue = path_to_actions(path)
+        return True
 
 
 def get_positions_with_max_energy(nodes, score_map):

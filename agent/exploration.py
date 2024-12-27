@@ -61,8 +61,11 @@ class RelicFinder(Task):
             goal=self.target.coordinates,
             ship_energy=ship.energy,
         )
+        if not path:
+            return False
 
         ship.action_queue = path_to_actions(path)
+        return True
 
 
 class VoidSeeker(Task):
@@ -78,7 +81,11 @@ class VoidSeeker(Task):
     def completed(self, state, ship):
         if not ship.can_move():
             return True
-        return is_relic_fully_explored(state, self.target)
+        if self.target is None and is_relic_fully_explored(state, self.relic_node):
+            return True
+        if self.target.explored_for_reward:
+            return True
+        return False
 
     @classmethod
     def generate_tasks(cls, state):
@@ -115,7 +122,7 @@ class VoidSeeker(Task):
 
         path = rs.find_path(target_node.coordinates)
         if not path:
-            return
+            return 0
 
         energy_needed = estimate_energy_cost(state.space, path)
 
@@ -139,8 +146,7 @@ class VoidSeeker(Task):
                 target_node, min_distance = node, grid_distance
 
         if not target_node:
-            ship.task = None
-            return
+            return False
 
         path = find_path_in_dynamic_environment(
             state,
@@ -150,8 +156,7 @@ class VoidSeeker(Task):
         )
 
         if len(path) == 0:
-            ship.task = None
-            return
+            return False
 
         if len(path) == 1:
             next_node = target_node
@@ -201,6 +206,7 @@ class VoidSeeker(Task):
 
         self.target = target_node
         ship.action_queue = path_to_actions(path)
+        return True
 
 
 def is_relic_fully_explored(state, relic_node):

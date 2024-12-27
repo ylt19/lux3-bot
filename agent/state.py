@@ -21,13 +21,14 @@ from .fleet import Fleet
 class State:
     def __init__(self, team_id):
         self.team_id = team_id
+        self.opp_team_id = 1 - team_id
         self.global_step = 0  # global step of the game
         self.match_step = 0  # current step in the match
         self.match_number = 0  # current match number
 
         self.space = Space()
         self.fleet = Fleet(team_id)
-        self.opp_fleet = Fleet(1 - team_id)
+        self.opp_fleet = Fleet(self.opp_team_id)
 
         self._obstacles_movement_status = []
 

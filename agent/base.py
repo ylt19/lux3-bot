@@ -73,7 +73,12 @@ class Global:
         VOID_SINGER_INIT_SCORE = 800
         VOID_SINGER_PATH_LENGTH_MULTIPLIER = -5
         VOID_SINGER_ENERGY_COST_MULTIPLIER = -0.2
-        VOID_SINGER_NODE_ENERGY_MULTIPLIER = 1
+        VOID_SINGER_NODE_ENERGY_MULTIPLIER = 25
+        VOID_SINGER_MIDDLE_LANE_DISTANCE_MULTIPLIER = -5
+
+        HEAL_INIT_SCORE = 600
+        HEAL_OPP_SPAWN_DISTANCE_MULTIPLIER = -1
+        HEAL_SHIP_ENERGY_MULTIPLIER = -1
 
     HIDDEN_NODE_ENERGY = Params.HIDDEN_NODE_ENERGY
 
@@ -167,6 +172,7 @@ def warp_point(x, y):
 class Task:
     def __init__(self, target):
         self.target = target
+        self.ship = None
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.target})"
