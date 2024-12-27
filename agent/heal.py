@@ -62,6 +62,37 @@ class Heal(Task):
         opp_spawn_distance = manhattan_distance(opp_spawn_location, ship.coordinates)
         ship_energy = ship.energy
 
+        p = Global.Params
+        score = (
+            p.HEAL_INIT_SCORE
+            + opp_spawn_distance * p.HEAL_OPP_SPAWN_DISTANCE_MULTIPLIER
+            + ship_energy * p.HEAL_SHIP_ENERGY_MULTIPLIER
+        )
+
+        return score
+
+    def apply(self, state, _):
+        target = self.find_target(state)
+        if not target:
+            return False
+
+        ship = self.ship
+        path = find_path_in_dynamic_environment(
+            state,
+            start=ship.coordinates,
+            goal=target.coordinates,
+            ship_energy=ship.energy,
+        )
+        if not path:
+            return False
+
+        self.target = target
+        ship.action_queue = path_to_actions(path)
+        return True
+
+    def find_target(self, state):
+        ship = self.ship
+
         score_map = estimate_gather_energy_score_map(state)
 
         for other_ship in state.fleet:
@@ -79,33 +110,12 @@ class Heal(Task):
 
         target, _ = find_closest_target(state, ship.coordinates, targets)
         if not target:
-            return 0
+            return
 
         if not ship.can_move() and target != ship.coordinates:
-            return 0
+            return
 
-        self.target = state.space.get_node(*target)
-
-        p = Global.Params
-        score = (
-            p.HEAL_INIT_SCORE
-            + opp_spawn_distance * p.HEAL_OPP_SPAWN_DISTANCE_MULTIPLIER
-            + ship_energy * p.HEAL_SHIP_ENERGY_MULTIPLIER
-        )
-
-        return score
-
-    def apply(self, state, _):
-        ship = self.ship
-        path = find_path_in_dynamic_environment(
-            state,
-            start=ship.coordinates,
-            goal=self.target.coordinates,
-            ship_energy=ship.energy,
-        )
-
-        ship.action_queue = path_to_actions(path)
-        return True
+        return state.space.get_node(*target)
 
 
 def get_positions_with_max_energy(nodes, score_map):
