@@ -56,9 +56,20 @@ def apply_tasks(state):
 
 
 def generate_tasks(state):
-    return [
-        *RelicFinder.generate_tasks(state),
-        *VoidSeeker.generate_tasks(state),
-        *VoidSinger.generate_tasks(state),
-        *Heal.generate_tasks(state),
-    ]
+    tasks = []
+
+    p = Global.Params
+
+    if p.RELIC_FINDER_TASK:
+        tasks += RelicFinder.generate_tasks(state)
+
+    if p.VOID_SEEKER_TASK:
+        tasks += VoidSeeker.generate_tasks(state)
+
+    if p.VOID_SINGER_TASK:
+        tasks += VoidSinger.generate_tasks(state)
+
+    if p.HEAL_TASK:
+        tasks += Heal.generate_tasks(state)
+
+    return tasks

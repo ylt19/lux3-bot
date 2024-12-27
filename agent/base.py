@@ -3,8 +3,11 @@ import sys
 
 
 class Global:
-    VERBOSITY = 3
-    if os.path.exists("/kaggle_simulations"):
+    VERBOSITY = 1
+    POISON = True
+
+    IS_KAGGLE = os.path.exists("/kaggle_simulations")
+    if IS_KAGGLE:
         VERBOSITY = -1
 
     # Game related constants
@@ -57,29 +60,43 @@ class Global:
     # This information will be used to determine the speed and direction of obstacle movement.
     OBSTACLES_MOVEMENT_STATUS = []
 
-    # Others:
-    class Params:
+    # Game Params:
+    class DefaultParams:
         HIDDEN_NODE_ENERGY = 0
         ENERGY_TO_WEIGHT_BASE = 1.2
 
+        RELIC_FINDER_TASK = True
         RELIC_FINDER_INIT_SCORE = 1000
         RELIC_FINDER_PATH_LENGTH_MULTIPLIER = -5
         RELIC_FINDER_ENERGY_COST_MULTIPLIER = -0.2
 
+        VOID_SEEKER_TASK = True
         VOID_SEEKER_INIT_SCORE = 1200
         VOID_SEEKER_PATH_LENGTH_MULTIPLIER = -5
         VOID_SEEKER_ENERGY_COST_MULTIPLIER = -0.2
 
+        VOID_SINGER_TASK = True
         VOID_SINGER_INIT_SCORE = 800
         VOID_SINGER_PATH_LENGTH_MULTIPLIER = -5
         VOID_SINGER_ENERGY_COST_MULTIPLIER = -0.2
         VOID_SINGER_NODE_ENERGY_MULTIPLIER = 25
         VOID_SINGER_MIDDLE_LANE_DISTANCE_MULTIPLIER = -5
 
+        HEAL_TASK = True
         HEAL_INIT_SCORE = 600
         HEAL_OPP_SPAWN_DISTANCE_MULTIPLIER = -1
         HEAL_SHIP_ENERGY_MULTIPLIER = -1
 
+    class MatchOverChill(DefaultParams):
+        VOID_SINGER_INIT_SCORE = 1000
+        VOID_SINGER_MIDDLE_LANE_DISTANCE_MULTIPLIER = 100
+
+    class GameOverChill(DefaultParams):
+        RELIC_FINDER_TASK = False
+        VOID_SEEKER_TASK = False
+        VOID_SINGER_TASK = False
+
+    Params = DefaultParams
     HIDDEN_NODE_ENERGY = Params.HIDDEN_NODE_ENERGY
 
 
@@ -167,6 +184,14 @@ def warp_int(x):
 
 def warp_point(x, y):
     return warp_int(x), warp_int(y)
+
+
+def set_game_prams(new_params):
+    if Global.Params == new_params:
+        return
+
+    log(f"Update Params {Global.Params.__name__}->{new_params.__name__}", level=2)
+    Global.Params = new_params
 
 
 class Task:

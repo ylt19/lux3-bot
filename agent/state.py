@@ -10,6 +10,7 @@ from .base import (
     Global,
     Colors,
     warp_point,
+    set_game_prams,
     get_spawn_location,
     chebyshev_distance,
 )
@@ -56,6 +57,7 @@ class State:
             self.opp_fleet.clear()
             self.space.clear()
             self.space.move_obstacles(self.global_step)
+            self._update_game_params()
             return
 
         points = int(obs["team_points"][self.team_id])
@@ -82,6 +84,21 @@ class State:
             self.space.update_nodes_by_expected_sensor_mask(
                 self.fleet.expected_sensor_mask()
             )
+
+        self._update_game_params()
+
+    def _update_game_params(self):
+
+        if Global.POISON and self.is_game_over():
+            set_game_prams(Global.GameOverChill)
+            return
+
+        if self.match_step == 0:
+            set_game_prams(Global.DefaultParams)
+            return
+
+        if Global.POISON and self.is_match_over():
+            set_game_prams(Global.MatchOverChill)
 
     def _update_step_counters(self):
         self.global_step += 1
