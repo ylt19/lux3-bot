@@ -22,11 +22,15 @@ class RelicFinder(Task):
         return f"{self.__class__.__name__}{self.target.coordinates}"
 
     def completed(self, state, ship):
-        return True  # self.target.explored_for_relic
+        if not ship.can_move():
+            return True
+        return self.target.explored_for_relic
 
     @classmethod
     def generate_tasks(cls, state):
-        targets = get_targets_for_relic_exploration(state)
+        targets = get_targets_for_relic_exploration(
+            state, max_num_targets=Global.Params.RELIC_FINDER_NUM_TASKS
+        )
         tasks = []
         for target in targets:
             tasks.append(cls(state.space.get_node(*target)))
@@ -240,14 +244,23 @@ def get_targets_for_relic_exploration(state, max_num_targets=16):
     sensor_range = Global.UNIT_SENSOR_RANGE
     spawn_location = get_spawn_location(state.team_id)
 
-    def spawn_distance(t_):
-        return manhattan_distance(spawn_location, t_)
-
-    targets = []
+    targets = set()
     for node in space:
         x, y = node.coordinates
         if not node.explored_for_relic and is_team_sector(state.team_id, x, y):
-            targets.append((x, y))
+            targets.add((x, y))
+
+    num_targets = 0
+    for ship in state.fleet:
+        if isinstance(ship.task, RelicFinder):
+            num_targets += 1
+            target_coordinates = ship.task.target.coordinates
+            for xy in nearby_positions(*target_coordinates, sensor_range):
+                if xy in targets:
+                    targets.remove(xy)
+
+    def spawn_distance(t_):
+        return manhattan_distance(spawn_location, t_)
 
     if len(targets) > SECTOR_SIZE / 2:
         # First of all, we want to explore the area in the center of the map.
@@ -271,7 +284,7 @@ def get_targets_for_relic_exploration(state, max_num_targets=16):
             continue
 
         filtered_targets.append(target)
-        if len(filtered_targets) == max_num_targets:
+        if len(filtered_targets) == max_num_targets - num_targets:
             break
 
         for xy in nearby_positions(*target, sensor_range):
