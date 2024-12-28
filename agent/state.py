@@ -2,7 +2,7 @@ from copy import copy, deepcopy
 
 import numpy as np
 from collections import defaultdict
-from pathfinding import Grid, ReservationTable, ResumableDijkstra
+from pathfinding import Grid, AStar, ReservationTable, ResumableDijkstra
 from pathfinding.visualization import animate_grid
 
 from .base import (
@@ -37,12 +37,14 @@ class State:
         self._obstacle_grid = None
         self._reservation_table = None
         self._resumable_dijkstra = None
+        self._routes = None
 
     def update(self, obs):
         self._energy_grid = None
         self._obstacle_grid = None
         self._reservation_table = None
         self._resumable_dijkstra = None
+        self._routes = None
 
         if obs["steps"] > 0:
             self._update_step_counters()
@@ -323,6 +325,21 @@ class State:
     def is_game_over(self):
         return self.get_game_status() != 0
 
+    def route(self, start, goal, with_obstacles=True):
+        if self._routes is None:
+            self._routes = {}
+
+        if (start, goal, with_obstacles) in self._routes:
+            return self._routes[(start, goal, with_obstacles)]
+
+        if with_obstacles:
+            route = AStar(self.obstacle_grid).find_path(start, goal)
+        else:
+            route = AStar(self.energy_grid).find_path(start, goal)
+
+        self._routes[(start, goal, with_obstacles)] = route
+        return route
+
 
 def add_dynamic_environment(rt, state):
     shift = Global.OBSTACLE_MOVEMENT_DIRECTION
@@ -375,14 +392,7 @@ def energy_to_weight(energy):
 def create_energy_grid(space):
     weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
     for node in space:
-
-        node_energy = node.energy
-        if node_energy is None:
-            node_energy = Global.HIDDEN_NODE_ENERGY
-
-        w = energy_to_weight(node_energy)
-
-        weights[node.y][node.x] = w
+        weights[node.y][node.x] = energy_to_weight(node.energy_gain)
 
     return Grid(weights, pause_action_cost="node.weight")
 
@@ -395,14 +405,7 @@ def create_grid_with_obstacles(space):
         if not node.is_walkable:
             w = -1
         else:
-            node_energy = node.energy
-            if node_energy is None:
-                node_energy = Global.HIDDEN_NODE_ENERGY
-
-            if node.type == NodeType.nebula:
-                node_energy -= Global.NEBULA_ENERGY_REDUCTION
-
-            w = energy_to_weight(node_energy)
+            w = energy_to_weight(node.energy_gain)
 
         weights[node.y][node.x] = w
 
