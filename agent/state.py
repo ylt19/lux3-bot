@@ -384,9 +384,10 @@ def add_dynamic_environment(rt, state):
 
 
 def energy_to_weight(energy):
-    if energy < Global.UNIT_MOVE_COST:
-        return Global.UNIT_MOVE_COST - energy + 1
-    return Global.Params.ENERGY_TO_WEIGHT_BASE ** (Global.UNIT_MOVE_COST - energy)
+    ground = Global.Params.ENERGY_TO_WEIGHT_GROUND
+    if energy < ground:
+        return ground - energy + 1
+    return Global.Params.ENERGY_TO_WEIGHT_BASE ** (ground - energy)
 
 
 def create_energy_grid(space):

@@ -64,6 +64,7 @@ class Global:
     class DefaultParams:
         HIDDEN_NODE_ENERGY = 0
         ENERGY_TO_WEIGHT_BASE = 1.2
+        ENERGY_TO_WEIGHT_GROUND = 12
 
         RELIC_FINDER_TASK = True
         RELIC_FINDER_NUM_TASKS = 10
