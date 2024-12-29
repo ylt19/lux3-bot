@@ -3,6 +3,7 @@ from .exploration import VoidSeeker, RelicFinder
 from .exploitation import VoidSinger
 from .heal import Heal
 from .sap import sap
+from .msg import print_msg
 
 
 def apply_tasks(state):
@@ -51,6 +52,10 @@ def apply_tasks(state):
 
             ships_closed.add(ship)
             tasks_closed.add(task)
+
+    if Global.Params.MSG_TASK:
+        print_msg(state)
+        return
 
     sap(state)
 

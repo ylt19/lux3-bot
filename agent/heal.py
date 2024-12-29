@@ -75,34 +75,40 @@ class Heal(Task):
     def find_target(self, state):
         ship = self.ship
 
-        reward_nodes = [
-            x
-            for x in state.space.reward_nodes
-            if is_team_sector(state.team_id, *x.coordinates)
-        ]
-
-        reward_array = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int32)
-        for node in reward_nodes:
-            reward_array[node.y, node.x] = 1
-
-        reward_array = convolve2d(
-            reward_array,
-            np.ones((Global.UNIT_SAP_RANGE, Global.UNIT_SAP_RANGE), dtype=np.int32),
-            mode="same",
-            boundary="fill",
-            fillvalue=0,
-        )
-
         rs = state.get_resumable_dijkstra(ship.unit_id)
         steps_left_in_match = state.steps_left_in_match()
 
         node_to_score = {}
-        for x in range(SPACE_SIZE):
-            for y in range(SPACE_SIZE):
-                path = rs.find_path((x, y))
-                if reward_array[y, x] > 0 and path and len(path) < steps_left_in_match:
-                    node = state.space.get_node(x, y)
-                    node_to_score[node] = node.energy_gain
+        if Global.Params.HEAL_NEAR_REWARDS:
+
+            reward_nodes = [
+                x
+                for x in state.space.reward_nodes
+                if is_team_sector(state.team_id, *x.coordinates)
+            ]
+
+            reward_array = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int32)
+            for node in reward_nodes:
+                reward_array[node.y, node.x] = 1
+
+            reward_array = convolve2d(
+                reward_array,
+                np.ones((Global.UNIT_SAP_RANGE, Global.UNIT_SAP_RANGE), dtype=np.int32),
+                mode="same",
+                boundary="fill",
+                fillvalue=0,
+            )
+
+            for x in range(SPACE_SIZE):
+                for y in range(SPACE_SIZE):
+                    path = rs.find_path((x, y))
+                    if (
+                        reward_array[y, x] > 0
+                        and path
+                        and len(path) < steps_left_in_match
+                    ):
+                        node = state.space.get_node(x, y)
+                        node_to_score[node] = node.energy_gain
 
         if not node_to_score:
             for x in range(SPACE_SIZE):

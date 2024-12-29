@@ -1,12 +1,12 @@
 import os
 import sys
 
+IS_KAGGLE = os.path.exists("/kaggle_simulations")
+
 
 class Global:
     VERBOSITY = 1
     POISON = True
-
-    IS_KAGGLE = os.path.exists("/kaggle_simulations")
     if IS_KAGGLE:
         VERBOSITY = -1
 
@@ -85,9 +85,13 @@ class Global:
         VOID_SINGER_MIDDLE_LANE_DISTANCE_MULTIPLIER = -5
 
         HEAL_TASK = True
+        HEAL_NEAR_REWARDS = True
         HEAL_INIT_SCORE = 600
         HEAL_OPP_SPAWN_DISTANCE_MULTIPLIER = -1
         HEAL_SHIP_ENERGY_MULTIPLIER = -1
+
+        MSG_TASK = False
+        MSG_GENERATED = False
 
     class MatchOverChill(DefaultParams):
         VOID_SINGER_INIT_SCORE = 1000
@@ -97,6 +101,9 @@ class Global:
         RELIC_FINDER_TASK = False
         VOID_SEEKER_TASK = False
         VOID_SINGER_TASK = False
+        HEAL_NEAR_REWARDS = False
+        if IS_KAGGLE:
+            MSG_TASK = True
 
     Params = DefaultParams
     HIDDEN_NODE_ENERGY = Params.HIDDEN_NODE_ENERGY
