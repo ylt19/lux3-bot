@@ -23,92 +23,111 @@ HNY_MSG = {
     "min_sap_range": 4,
     "ship_tasks": [
         # H N Y
-        {"position": (0, 0), "sap": [(0, 4), (0, 4), (1, 2), None]},
-        {"position": (0, 2), "sap": [(2, 0), (2, 2), None, None]},
-        {"position": (2, 0), "sap": [(0, 4), (0, 4), (-2, 4), None]},
+        {"position": (0, 0), "sap": [(0, 4), (0, 4), (1, 2)]},
+        {"position": (0, 2), "sap": [(2, 0), (2, 2), None]},
+        {"position": (2, 0), "sap": [(0, 4), (0, 4), (-2, 4)]},
         # A E E
-        {"position": (6, 0), "sap": [(-2, 4), (-2, 0), (-2, 0), None]},
-        {"position": (6, 2), "sap": [(-1, 0), (-2, 0), (-2, 0), None]},
-        {"position": (6, 4), "sap": [(0, -4), (-2, 0), (-2, 0), None]},
+        {"position": (6, 0), "sap": [(-2, 4), (-2, 0), (-2, 0)]},
+        {"position": (6, 2), "sap": [(-1, 0), (-2, 0), (-2, 0)]},
+        {"position": (6, 4), "sap": [(0, -4), (-2, 0), (-2, 0)]},
         # P W A
-        {"position": (10, 0), "sap": [(-2, 0), (-2, 4), (-2, 4), None]},
-        {"position": (10, 0), "sap": [(0, 2), (0, 4), (0, 4), None]},
-        {"position": (10, 2), "sap": [(-2, 0), None, (-1, 0), None]},
-        {"position": (8, 4), "sap": [(0, -4), (0, -4), None, None]},
+        {"position": (10, 0), "sap": [(-2, 0), (-2, 4), (-2, 4)]},
+        {"position": (10, 0), "sap": [(0, 2), (0, 4), (0, 4)]},
+        {"position": (10, 2), "sap": [(-2, 0), None, (-1, 0)]},
+        {"position": (8, 4), "sap": [(0, -4), (0, -4), None]},
         # P - R
-        {"position": (12, 0), "sap": [(0, 4), (-2, 4), (0, 4), None]},
-        {"position": (12, 0), "sap": [(2, 0), None, (2, 0), None]},
-        {"position": (14, 0), "sap": [(0, 2), None, (-1, 2), None]},
-        {"position": (12, 2), "sap": [(2, 0), None, (2, 2), None]},
+        {"position": (12, 0), "sap": [(0, 4), (-2, 4), (0, 4)]},
+        {"position": (12, 0), "sap": [(2, 0), None, (2, 0)]},
+        {"position": (14, 0), "sap": [(0, 2), None, (-1, 2)]},
+        {"position": (12, 2), "sap": [(2, 0), None, (2, 2)]},
         # Y - -
-        {"position": (16, 0), "sap": [(1, 2), None, None, None]},
-        {"position": (18, 0), "sap": [(-2, 4), None, None, None]},
+        {"position": (16, 0), "sap": [(1, 2), None, None]},
+        {"position": (18, 0), "sap": [(-2, 4), None, None]},
     ],
 }
 
 
 class MsgTask(Task):
 
-    def __init__(self, target, path, sap, num_ships):
+    def __init__(self, target, path, sap):
         super().__init__(target)
         self.path = path
         self.sap = sap
-        self.num_ships = num_ships
 
     def __repr__(self):
         return f"{self.__class__.__name__}{self.target.coordinates}"
 
     def completed(self, state, ship):
-        num_ships = sum(isinstance(x.task, MsgTask) for x in state.fleet)
-        if num_ships != self.num_ships:
-            # We've lost some ships.
-            Global.Params.MSG_TASK_STARTED = False
-            Global.Params.MSG_TASK_FINISHED = False
-            return True
-
         return False
 
     def apply(self, state, ship):
-        if len(self.path) > 1:
-            if not ship.can_move():
-                log(
-                    f"Task {self} cannot be completed, {ship} cannot move, step={state.global_step}"
-                )
-                return False
-
-            self.path = self.path[1:]
-            ship.action_queue = path_to_actions(self.path)
-
-        else:
-            if not self.sap:
-                Global.Params.MSG_TASK_STARTED = False
-                Global.Params.MSG_TASK_FINISHED = True
-                return False
-
-            if self.sap[0]:
-                ship.action_queue = [Action(ActionType.sap, *self.sap[0])]
-
-            self.sap = self.sap[1:]
-
         return True
 
 
 def print_msg(state):
     msg = HNY_MSG
-
     p = Global.Params
-    if (
-        not p.MSG_TASK
-        or p.MSG_TASK_STARTED
-        or p.MSG_TASK_FINISHED
-        or Global.UNIT_SAP_RANGE < msg["min_sap_range"]
-    ):
+
+    if not p.MSG_TASK or p.MSG_TASK_FINISHED:
+        return
+
+    if p.MSG_TASK_STARTED:
+        continue_to_print(state, msg)
+        return
+
+    if Global.UNIT_SAP_RANGE < msg["min_sap_range"]:
         return
 
     if apply_tasks(state, msg):
         p.MSG_TASK_STARTED = True
-    else:
+
+
+def continue_to_print(state, msg):
+    num_ships = sum(isinstance(x.task, MsgTask) for x in state.fleet)
+    if num_ships != len(msg["ship_tasks"]):
+        # We've lost some ships.
+        Global.Params.MSG_TASK_STARTED = False
+        Global.Params.MSG_TASK_FINISHED = False
+        for ship in state.fleet:
+            if isinstance(ship.task, MsgTask):
+                ship.task = None
         return
+
+    num_msg_ships = 0
+    for ship in state.fleet:
+        task = ship.task
+
+        if not isinstance(task, MsgTask):
+            continue
+
+        if len(task.path) > 1:
+            if not ship.can_move():
+                log(
+                    f"Task {task} cannot be completed, {ship} cannot move, step={state.global_step}"
+                )
+                ship.task = None
+                continue
+
+            task.path = task.path[1:]
+            ship.action_queue = path_to_actions(task.path)
+            num_msg_ships += 1
+
+        else:
+            if not task.sap:
+                ship.task = None
+                continue
+
+            if task.sap[0]:
+                ship.action_queue = [Action(ActionType.sap, *task.sap[0])]
+            else:
+                ship.action_queue = []
+
+            task.sap = task.sap[1:]
+            num_msg_ships += 1
+
+    if num_msg_ships == 0:
+        Global.Params.MSG_TASK_STARTED = False
+        Global.Params.MSG_TASK_FINISHED = True
 
 
 def apply_tasks(state, msg):
@@ -120,7 +139,7 @@ def apply_tasks(state, msg):
         if ship.energy > 100:
             ships.append(ship)
 
-    if len(ships) < 16:
+    if len(ships) < len(msg["ship_tasks"]):
         return False
 
     for top_left in msg["top_left_options"][state.team_id]:
@@ -130,7 +149,7 @@ def apply_tasks(state, msg):
                 goal = state.space.get_node(*task["goal"])
                 path = task["path"]
 
-                msg_task = MsgTask(goal, path, task["sap"], len(ship_to_task))
+                msg_task = MsgTask(goal, path, task["sap"])
                 ship.task = msg_task
                 ship.action_queue = path_to_actions(path)
 
