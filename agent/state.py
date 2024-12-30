@@ -34,6 +34,7 @@ class State:
         self._obstacles_movement_status = []
 
         self._energy_grid = None
+        self._energy_gain_grid = None
         self._obstacle_grid = None
         self._reservation_table = None
         self._resumable_dijkstra = None
@@ -41,6 +42,7 @@ class State:
 
     def update(self, obs):
         self._energy_grid = None
+        self._energy_gain_grid = None
         self._obstacle_grid = None
         self._reservation_table = None
         self._resumable_dijkstra = None
@@ -232,6 +234,12 @@ class State:
         return self._energy_grid
 
     @property
+    def energy_gain_grid(self):
+        if self._energy_gain_grid is None:
+            self._energy_gain_grid = create_energy_gain_grid(self.space)
+        return self._energy_gain_grid
+
+    @property
     def obstacle_grid(self):
         if self._obstacle_grid is None:
             self._obstacle_grid = create_grid_with_obstacles(self.space)
@@ -335,7 +343,7 @@ class State:
         if with_obstacles:
             route = AStar(self.obstacle_grid).find_path(start, goal)
         else:
-            route = AStar(self.energy_grid).find_path(start, goal)
+            route = AStar(self.energy_gain_grid).find_path(start, goal)
 
         self._routes[(start, goal, with_obstacles)] = route
         return route
@@ -391,6 +399,17 @@ def energy_to_weight(energy):
 
 
 def create_energy_grid(space):
+    weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
+    for node in space:
+        energy = node.energy
+        if energy is None:
+            energy = Global.HIDDEN_NODE_ENERGY
+        weights[node.y][node.x] = energy_to_weight(energy)
+
+    return Grid(weights, pause_action_cost="node.weight")
+
+
+def create_energy_gain_grid(space):
     weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
     for node in space:
         weights[node.y][node.x] = energy_to_weight(node.energy_gain)
