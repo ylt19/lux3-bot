@@ -723,7 +723,8 @@ cdef class SpaceTimeAStar(_AbsPathFinder):
         if reservation_table is None:
             crt = NULL
         else:
-            assert(reservation_table.graph == self.graph)
+            if reservation_table.graph.size != self.graph.size:
+                raise ValueError("Can't use this reservation table, the sizes of the graphs don't match")
             crt = reservation_table._obj
         return crt
 
