@@ -34,6 +34,7 @@ class State:
         self._obstacles_movement_status = []
 
         self._energy_grid = None
+        self._low_energy_grid = None
         self._energy_gain_grid = None
         self._obstacle_grid = None
         self._reservation_table = None
@@ -42,6 +43,7 @@ class State:
 
     def update(self, obs):
         self._energy_grid = None
+        self._low_energy_grid = None
         self._energy_gain_grid = None
         self._obstacle_grid = None
         self._reservation_table = None
@@ -230,19 +232,33 @@ class State:
     @property
     def energy_grid(self):
         if self._energy_grid is None:
-            self._energy_grid = create_energy_grid(self.space)
+            self._energy_grid = create_energy_grid(
+                self.space, Global.Params.ENERGY_TO_WEIGHT_GROUND
+            )
         return self._energy_grid
+
+    @property
+    def low_energy_grid(self):
+        if self._low_energy_grid is None:
+            self._low_energy_grid = create_energy_grid(
+                self.space, ground=Global.UNIT_MOVE_COST
+            )
+        return self._low_energy_grid
 
     @property
     def energy_gain_grid(self):
         if self._energy_gain_grid is None:
-            self._energy_gain_grid = create_energy_gain_grid(self.space)
+            self._energy_gain_grid = create_energy_gain_grid(
+                self.space, Global.Params.ENERGY_TO_WEIGHT_GROUND
+            )
         return self._energy_gain_grid
 
     @property
     def obstacle_grid(self):
         if self._obstacle_grid is None:
-            self._obstacle_grid = create_grid_with_obstacles(self.space)
+            self._obstacle_grid = create_grid_with_obstacles(
+                self.space, Global.Params.ENERGY_TO_WEIGHT_GROUND
+            )
         return self._obstacle_grid
 
     @property
@@ -391,33 +407,32 @@ def add_dynamic_environment(rt, state):
     return rt
 
 
-def energy_to_weight(energy):
-    ground = Global.Params.ENERGY_TO_WEIGHT_GROUND
+def energy_to_weight(energy, ground):
     if energy < ground:
         return ground - energy + 1
     return Global.Params.ENERGY_TO_WEIGHT_BASE ** (ground - energy)
 
 
-def create_energy_grid(space):
+def create_energy_grid(space, ground):
     weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
     for node in space:
         energy = node.energy
         if energy is None:
             energy = Global.HIDDEN_NODE_ENERGY
-        weights[node.y][node.x] = energy_to_weight(energy)
+        weights[node.y][node.x] = energy_to_weight(energy, ground)
 
     return Grid(weights, pause_action_cost="node.weight")
 
 
-def create_energy_gain_grid(space):
+def create_energy_gain_grid(space, ground):
     weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
     for node in space:
-        weights[node.y][node.x] = energy_to_weight(node.energy_gain)
+        weights[node.y][node.x] = energy_to_weight(node.energy_gain, ground)
 
     return Grid(weights, pause_action_cost="node.weight")
 
 
-def create_grid_with_obstacles(space):
+def create_grid_with_obstacles(space, ground):
     weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
 
     for node in space:
@@ -425,7 +440,7 @@ def create_grid_with_obstacles(space):
         if not node.is_walkable:
             w = -1
         else:
-            w = energy_to_weight(node.energy_gain)
+            w = energy_to_weight(node.energy_gain, ground)
 
         weights[node.y][node.x] = w
 

@@ -137,8 +137,8 @@ def allowed_movements(x, y, space):
     return actions
 
 
-def find_path_in_dynamic_environment(state, start, goal, ship_energy=None):
-    grid = state.energy_grid
+def find_path_in_dynamic_environment(state, start, goal, ship_energy=None, grid=None):
+    grid = grid or state.energy_grid
     reservation_table = copy.copy(state.reservation_table)
 
     if ship_energy is not None:
