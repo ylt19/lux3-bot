@@ -9,10 +9,12 @@ HNY_MSG = {
     "top_left_options": {
         0: [
             *[(1, y) for y in range(1, 14, 2)],
+            *[(2, y) for y in range(1, 14, 2)],
             *[(3, y) for y in range(1, 14, 2)],
         ],
         1: [
             *[(4, y) for y in range(18, 5, -2)],
+            *[(3, y) for y in range(18, 5, -2)],
             *[(2, y) for y in range(18, 5, -2)],
         ],
     },
@@ -36,7 +38,7 @@ HNY_MSG = {
         # P - R
         {"position": (12, 0), "sap": [(0, 4), (-2, 4), (0, 4), None]},
         {"position": (12, 0), "sap": [(2, 0), None, (2, 0), None]},
-        {"position": (14, 0), "sap": [(0, 2), None, (-2, 2), None]},
+        {"position": (14, 0), "sap": [(0, 2), None, (-1, 2), None]},
         {"position": (12, 2), "sap": [(2, 0), None, (2, 2), None]},
         # Y - -
         {"position": (16, 0), "sap": [(1, 2), None, None, None]},
@@ -117,7 +119,7 @@ def apply_tasks(state, msg):
         return False
 
     for top_left in msg["top_left_options"][state.team_id]:
-        ship_to_task = apply_with_top_left(state, ships, top_left, msg)
+        ship_to_task = apply_to_position(state, ships, top_left, msg)
         if ship_to_task:
             for ship, task in ship_to_task.items():
                 goal = state.space.get_node(*task["goal"])
@@ -135,7 +137,7 @@ def apply_tasks(state, msg):
     return False
 
 
-def apply_with_top_left(state, ships, top_left, msg):
+def apply_to_position(state, ships, top_left, msg):
     top_left_x, top_left_y = top_left
     ship_tasks = msg["ship_tasks"]
     num_msg_steps = msg["num_steps"]
