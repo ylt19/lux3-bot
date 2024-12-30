@@ -20,7 +20,7 @@ def sap(state: State):
             opp_ships_array[y + sap_range][x + sap_range] += 1
             opp_ship_to_energy[opp_ship] = opp_ship.energy
 
-    for ship in state.fleet:
+    for ship in sorted(state.fleet, key=lambda s: -s.energy):
         if not ship.can_sap():
             continue
 
