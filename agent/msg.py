@@ -62,6 +62,8 @@ class MsgTask(Task):
         num_ships = sum(isinstance(x.task, MsgTask) for x in state.fleet)
         if num_ships != self.num_ships:
             # We've lost some ships.
+            Global.Params.MSG_TASK_STARTED = False
+            Global.Params.MSG_TASK_FINISHED = False
             return True
 
         return False
@@ -79,6 +81,8 @@ class MsgTask(Task):
 
         else:
             if not self.sap:
+                Global.Params.MSG_TASK_STARTED = False
+                Global.Params.MSG_TASK_FINISHED = True
                 return False
 
             if self.sap[0]:
@@ -95,13 +99,14 @@ def print_msg(state):
     p = Global.Params
     if (
         not p.MSG_TASK
-        or p.MSG_GENERATED
+        or p.MSG_TASK_STARTED
+        or p.MSG_TASK_FINISHED
         or Global.UNIT_SAP_RANGE < msg["min_sap_range"]
     ):
         return
 
     if apply_tasks(state, msg):
-        p.MSG_GENERATED = True
+        p.MSG_TASK_STARTED = True
     else:
         return
 

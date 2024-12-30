@@ -91,7 +91,8 @@ class Global:
         HEAL_SHIP_ENERGY_MULTIPLIER = -1
 
         MSG_TASK = False
-        MSG_GENERATED = False
+        MSG_TASK_STARTED = False
+        MSG_TASK_FINISHED = False
 
     class MatchOverChill(DefaultParams):
         VOID_SINGER_INIT_SCORE = 1000
