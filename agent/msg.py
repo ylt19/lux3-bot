@@ -1,25 +1,13 @@
 import numpy as np
-from .base import log, Task, Global, manhattan_distance
+from .base import log, SPACE_SIZE, Task, Global, manhattan_distance, get_spawn_location
 from .path import path_to_actions, Action, ActionType
 
 from pathfinding import Grid, SpaceTimeAStar, ReservationTable
 
-# Happy New Year Message
+# Happy New Year
 HNY_MSG = {
-    "top_left_options": {
-        0: [
-            *[(1, y) for y in range(1, 14, 2)],
-            *[(2, y) for y in range(1, 14, 2)],
-            *[(3, y) for y in range(1, 14, 2)],
-        ],
-        1: [
-            *[(4, y) for y in range(18, 5, -2)],
-            *[(3, y) for y in range(18, 5, -2)],
-            *[(2, y) for y in range(18, 5, -2)],
-        ],
-    },
     "size": (19, 5),
-    "num_steps": 3,
+    "num_sap_steps": 3,
     "min_sap_range": 4,
     "ship_tasks": [
         # H N Y
@@ -46,6 +34,33 @@ HNY_MSG = {
     ],
 }
 
+# Nice Play TY
+NP_MSG = {
+    "size": (15, 5),
+    "num_sap_steps": 3,
+    "min_sap_range": 4,
+    "ship_tasks": [
+        # N P -
+        {"position": (0, 0), "sap": [(0, 4), (0, 4), None]},
+        {"position": (0, 0), "sap": [(2, 4), (2, 0), None]},
+        {"position": (2, 0), "sap": [(0, 4), (0, 2), None]},
+        {"position": (0, 2), "sap": [None, (2, 0), None]},
+        # I L T
+        {"position": (4, 0), "sap": [(0, 4), (0, 4), (0, 4)]},
+        # C L T
+        {"position": (6, 0), "sap": [(0, 4), None, (-4, 0)]},
+        {"position": (8, 0), "sap": [(-2, 0), None, (1, 2)]},
+        {"position": (6, 4), "sap": [(2, 0), (-2, 0), None]},
+        # E A Y
+        {"position": (10, 0), "sap": [(0, 4), (-2, 4), (-2, 4)]},
+        {"position": (12, 0), "sap": [(-2, 0), (1, 2), None]},
+        {"position": (10, 2), "sap": [(2, 0), (-1, 0), None]},
+        {"position": (10, 4), "sap": [(2, 0), (0, -4), None]},
+        # - Y -
+        {"position": (14, 0), "sap": [None, (-2, 4), None]},
+    ],
+}
+
 
 class MsgTask(Task):
 
@@ -65,7 +80,7 @@ class MsgTask(Task):
 
 
 def print_msg(state):
-    msg = HNY_MSG
+    msg = NP_MSG
     p = Global.Params
 
     if not p.MSG_TASK or p.MSG_TASK_FINISHED:
@@ -94,6 +109,7 @@ def continue_to_print(state, msg):
         return
 
     num_msg_ships = 0
+    finder = create_finder(state, energy_ground=Global.UNIT_MOVE_COST)
     for ship in state.fleet:
         task = ship.task
 
@@ -108,8 +124,15 @@ def continue_to_print(state, msg):
                 ship.task = None
                 continue
 
-            task.path = task.path[1:]
-            ship.action_queue = path_to_actions(task.path)
+            new_path = finder.find_path_with_exact_length(
+                ship.coordinates,
+                task.target.coordinates,
+                length=len(task.path) - 2,
+                reservation_table=state.reservation_table,
+            )
+
+            task.path = new_path
+            ship.action_queue = path_to_actions(new_path)
             num_msg_ships += 1
 
         else:
@@ -142,7 +165,36 @@ def apply_tasks(state, msg):
     if len(ships) < len(msg["ship_tasks"]):
         return False
 
-    for top_left in msg["top_left_options"][state.team_id]:
+    spawn_position = get_spawn_location(state.team_id)
+
+    top_left_options = []
+    for top_left_node in state.space:
+        top_left = top_left_node.coordinates
+        if top_left[0] == 0 or top_left[1] == 0:
+            continue
+
+        bottom_right = (
+            top_left[0] + msg["size"][0] - 1,
+            top_left[1] + msg["size"][1] - 1,
+        )
+        if bottom_right[0] >= SPACE_SIZE - 1 or bottom_right[1] >= SPACE_SIZE - 1:
+            continue
+
+        if state.team_id == 0:
+            distance = manhattan_distance(spawn_position, top_left)
+        else:
+            distance = manhattan_distance(spawn_position, bottom_right)
+
+        if distance >= SPACE_SIZE / 2 - 1:
+            continue
+
+        top_left_options.append(top_left)
+
+    top_left_options = sorted(
+        top_left_options, key=lambda x: manhattan_distance(x, spawn_position)
+    )
+
+    for top_left in top_left_options:
         ship_to_task = apply_to_position(state, ships, top_left, msg)
         if ship_to_task:
             for ship, task in ship_to_task.items():
@@ -164,7 +216,7 @@ def apply_tasks(state, msg):
 def apply_to_position(state, ships, top_left, msg):
     top_left_x, top_left_y = top_left
     ship_tasks = msg["ship_tasks"]
-    num_msg_steps = msg["num_steps"]
+    num_sap_steps = msg["num_sap_steps"]
 
     def get_absolute_position(position):
         return top_left_x + position[0], top_left_y + position[1]
@@ -183,14 +235,14 @@ def apply_to_position(state, ships, top_left, msg):
             if (
                 ship.energy
                 < Global.UNIT_SAP_COST * num_saps
-                + Global.NEBULA_ENERGY_REDUCTION * num_msg_steps
+                + Global.NEBULA_ENERGY_REDUCTION * num_sap_steps
                 + 5
             ):
                 continue
 
             distance = manhattan_distance(ship.coordinates, goal)
             if (
-                state.match_step + distance + num_msg_steps
+                state.match_step + distance + num_sap_steps
                 < Global.MAX_STEPS_IN_MATCH - 1
             ):
                 if distance < min_distance:
@@ -202,12 +254,14 @@ def apply_to_position(state, ships, top_left, msg):
         ship_to_task[best_ship] = {"sap": task["sap"], "goal": goal, "path": []}
 
     # find path
-    finder, reservation_table = create_finder(state, energy_ground=10)
+    steps_left = state.steps_left_in_match() - num_sap_steps
+    reservation_table = state.reservation_table
+    finder = create_finder(state, energy_ground=10)
     for ship, task in ship_to_task.items():
         path = finder.find_path_with_length_limit(
             ship.coordinates,
             task["goal"],
-            max_length=state.steps_left_in_match() - num_msg_steps,
+            max_length=steps_left,
             reservation_table=reservation_table,
         )
         if not path:
@@ -215,9 +269,7 @@ def apply_to_position(state, ships, top_left, msg):
         ship_to_task[ship]["path"] = path
 
     # find the best path
-    finder, reservation_table = create_finder(
-        state, energy_ground=Global.UNIT_MOVE_COST
-    )
+    finder = create_finder(state, energy_ground=Global.UNIT_MOVE_COST)
     max_length = max(len(x["path"]) for x in ship_to_task.values())
     for ship, task in ship_to_task.items():
         path = finder.find_path_with_exact_length(
@@ -234,7 +286,6 @@ def apply_to_position(state, ships, top_left, msg):
 
 
 def create_finder(state, energy_ground):
-    from .state import add_dynamic_environment
 
     def energy_to_weight(energy):
         if energy < energy_ground:
@@ -247,8 +298,5 @@ def create_finder(state, energy_ground):
 
     grid = Grid(weights, pause_action_cost="node.weight")
 
-    reservation_table = ReservationTable(grid)
-    add_dynamic_environment(reservation_table, state)
-
     finder = SpaceTimeAStar(grid)
-    return finder, reservation_table
+    return finder
