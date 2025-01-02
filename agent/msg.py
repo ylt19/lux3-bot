@@ -2,7 +2,7 @@ import numpy as np
 from .base import log, SPACE_SIZE, Task, Global, manhattan_distance, get_spawn_location
 from .path import path_to_actions, Action, ActionType
 
-from pathfinding import Grid, SpaceTimeAStar, ReservationTable
+from pathfinding import Grid, SpaceTimeAStar
 
 # Happy New Year
 HNY_MSG = {
@@ -61,6 +61,34 @@ NP_MSG = {
     ],
 }
 
+# Nice Play TY small (if unit_sap_range == 3)
+NP_MSG_SMALL = {
+    "size": (11, 4),
+    "num_sap_steps": 3,
+    "min_sap_range": 3,
+    "ship_tasks": [
+        # N P T
+        {"position": (0, 0), "sap": [(0, 3), (0, 3), None]},
+        {"position": (0, 0), "sap": [(2, 3), (2, 0), None]},
+        {"position": (2, 0), "sap": [(0, 3), (0, 2), (0, 3)]},
+        {"position": (0, 2), "sap": [None, (2, 0), None]},
+        # I L T
+        {"position": (3, 0), "sap": [(0, 3), (0, 3), (-2, 0)]},
+        # C L Y
+        {"position": (4, 0), "sap": [(0, 3), None, (1, 2)]},
+        {"position": (6, 0), "sap": [(-2, 0), None, (-2, 3)]},
+        {"position": (4, 3), "sap": [(2, 0), (-1, 0), None]},
+        # E A -
+        {"position": (7, 0), "sap": [(0, 3), (-2, 3), None]},
+        {"position": (7, 0), "sap": [(2, 0), (0, 3), None]},
+        {"position": (7, 2), "sap": [(2, 0), (-2, 0), None]},
+        {"position": (7, 3), "sap": [(2, 0), (0, 0), None]},
+        # - Y -
+        {"position": (8, 0), "sap": [None, (1, 2), None]},
+        {"position": (10, 0), "sap": [None, (-2, 3), None]},
+    ],
+}
+
 
 class MsgTask(Task):
 
@@ -80,7 +108,13 @@ class MsgTask(Task):
 
 
 def print_msg(state):
-    msg = NP_MSG
+    if Global.UNIT_SAP_RANGE == 3:
+        msg = NP_MSG_SMALL
+    elif Global.UNIT_SAP_RANGE >= 4:
+        msg = NP_MSG
+    else:
+        return
+
     p = Global.Params
 
     if not p.MSG_TASK or p.MSG_TASK_FINISHED:
