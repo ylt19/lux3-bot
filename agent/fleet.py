@@ -5,7 +5,7 @@ from .base import (
     log,
     Global,
     SPACE_SIZE,
-    is_inside,
+    get_spawn_location,
     nearby_positions,
     cardinal_positions,
 )
@@ -88,6 +88,10 @@ class Fleet:
 
         for ship in self.ships:
             self.vision += ship.vision
+
+    @property
+    def spawn_position(self):
+        return get_spawn_location(self.team_id)
 
 
 class Ship:
