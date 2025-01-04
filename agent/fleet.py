@@ -17,6 +17,7 @@ class Fleet:
     def __init__(self, team_id):
         self.team_id: int = team_id
         self.points: int = 0
+        self.reward: int = 0
         self.ships = [Ship(unit_id) for unit_id in range(Global.MAX_UNITS)]
 
         self.vision = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int8)
@@ -30,7 +31,9 @@ class Fleet:
                 yield ship
 
     def update(self, obs, space: Space):
-        self.points = int(obs["team_points"][self.team_id])
+        points = int(obs["team_points"][self.team_id])
+        self.reward = max(0, points - self.points)
+        self.points = points
 
         for ship, visible, position, energy in zip(
             self.ships,
@@ -62,6 +65,7 @@ class Fleet:
 
     def clear(self):
         self.points = 0
+        self.reward = 0
         for ship in self.ships:
             ship.clear()
 

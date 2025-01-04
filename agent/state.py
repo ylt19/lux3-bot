@@ -203,7 +203,7 @@ class State:
             m = f" - {ship} : {ship.task}"
             if ship.action_queue:
                 a = ship.action_queue[0]
-                m += f", action={a.type}"
+                m += f", action={a}"
             if show_path:
                 m += f", {ship.path()}"
             log(m)
