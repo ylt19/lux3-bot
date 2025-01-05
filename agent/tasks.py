@@ -4,6 +4,7 @@ from .exploitation import VoidSinger
 from .heal import Heal
 from .sap import sap
 from .msg import print_msg
+from .evasion import evasion
 
 
 def apply_tasks(state):
@@ -57,6 +58,7 @@ def apply_tasks(state):
         print_msg(state)
         return
 
+    evasion(state)
     sap(state)
 
 

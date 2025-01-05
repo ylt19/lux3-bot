@@ -52,7 +52,6 @@ class State:
         self._reservation_table = None
         self._resumable_dijkstra = None
         self._routes = None
-        self.field.clear()
 
         if obs["steps"] > 0:
             self._update_step_counters()
@@ -96,6 +95,7 @@ class State:
             )
 
         self._update_game_params()
+        self.field = Field(self)
 
     def _update_game_params(self):
 

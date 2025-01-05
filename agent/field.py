@@ -1,5 +1,8 @@
 import numpy as np
+from functools import cached_property
 from collections import defaultdict
+from pathfinding import Grid, ResumableDijkstra
+from scipy.signal import convolve2d
 
 from .path import NodeType
 from .base import log, Global, SPACE_SIZE, Colors, nearby_positions
@@ -9,73 +12,13 @@ class Field:
     def __init__(self, state):
         self._state = state
 
-        self._asteroid = None
-        self._nebulae = None
-        self._energy = None
-        self._energy_gain = None
-        self._vision = None
-        self._opp_vision = None
-        self._distance = None
-
-    def clear(self):
-        self._asteroid = None
-        self._nebulae = None
-        self._energy = None
-        self._energy_gain = None
-        self._vision = None
-        self._opp_vision = None
-        self._distance = None
+        self.asteroid, self.nebulae, self.energy, self.energy_gain = (
+            self._create_space_fields()
+        )
 
     @property
     def space(self):
         return self._state.space
-
-    @property
-    def asteroid(self):
-        if self._asteroid is None:
-            self._update_space_fields()
-        return self._asteroid
-
-    @property
-    def nebulae(self):
-        if self._nebulae is None:
-            self._update_space_fields()
-        return self._nebulae
-
-    @property
-    def energy(self):
-        if self._energy is None:
-            self._update_space_fields()
-        return self._energy
-
-    @property
-    def energy_gain(self):
-        if self._energy_gain is None:
-            self._update_space_fields()
-        return self._energy_gain
-
-    @property
-    def vision(self):
-        if self._vision is None:
-            self._vision = self._create_vision_field()
-        return self._vision
-
-    @property
-    def opp_vision(self):
-        if self._opp_vision is None:
-            self._opp_vision = self._create_opp_vision_field()
-        return self._opp_vision
-
-    @property
-    def distance(self):
-        if self._distance is None:
-            self._distance = self._create_distance_field()
-        return self._distance
-
-    def _update_space_fields(self):
-        self._asteroid, self._nebulae, self._energy, self._energy_gain = (
-            self._create_space_fields()
-        )
 
     def _create_space_fields(self):
         asteroid_field = np.zeros((SPACE_SIZE, SPACE_SIZE), np.float32)
@@ -94,14 +37,16 @@ class Field:
             energy_gain_field[y, x] = node.energy_gain
         return asteroid_field, nebulae_field, energy_field, energy_gain_field
 
-    def _create_vision_field(self):
+    @cached_property
+    def vision(self):
         field = np.zeros((SPACE_SIZE, SPACE_SIZE), np.float32)
         for node in self.space:
             if node.is_visible:
                 field[node.y, node.x] = 1
         return field
 
-    def _create_opp_vision_field(self):
+    @cached_property
+    def opp_vision(self):
         field = np.zeros((SPACE_SIZE, SPACE_SIZE), np.float32)
         field[np.where(self._state.opp_fleet.vision > 0)] = 1
 
@@ -134,13 +79,110 @@ class Field:
 
         return field
 
-    def _create_distance_field(self):
+    @cached_property
+    def distance(self):
         field = np.zeros((SPACE_SIZE, SPACE_SIZE), np.float32)
 
         for x in range(SPACE_SIZE):
             for y in range(SPACE_SIZE):
                 field[y, x] = self._state.fleet.spawn_distance(x, y)
 
+        return field
+
+    @cached_property
+    def opp_distance(self):
+        field = np.zeros((SPACE_SIZE, SPACE_SIZE), np.float32)
+
+        for x in range(SPACE_SIZE):
+            for y in range(SPACE_SIZE):
+                field[y, x] = self._state.opp_fleet.spawn_distance(x, y)
+
+        return field
+
+    @cached_property
+    def rear(self):
+        field = np.zeros((SPACE_SIZE, SPACE_SIZE), np.float32)
+
+        visibility_weights = np.ones((SPACE_SIZE, SPACE_SIZE), np.float32)
+        straight_weights = np.ones((SPACE_SIZE, SPACE_SIZE), np.float32)
+        for node in self.space:
+            if not node.is_walkable:
+                visibility_weights[node.y, node.x] = -1
+                straight_weights[node.y, node.x] = -1
+            if node.is_visible:
+                visibility_weights[node.y, node.x] = -1
+
+        visibility_grid = Grid(visibility_weights)
+        straight_grid = Grid(straight_weights)
+
+        opp_spawn_position = self._state.opp_fleet.spawn_position
+        visibility_rs = ResumableDijkstra(visibility_grid, opp_spawn_position)
+        straight_rs = ResumableDijkstra(straight_grid, opp_spawn_position)
+
+        for node in self.space:
+            visibility_path = visibility_rs.find_path(node.coordinates)
+            straight_path = straight_rs.find_path(node.coordinates)
+
+            if len(straight_path) < len(visibility_path):
+                field[node.y, node.x] = 1
+
+        return field
+
+    @cached_property
+    def opp_sap_ships_potential_positions(self):
+        out_of_vision = np.logical_and(self.vision == 0, self.rear == 0)
+
+        # is it possible for opponent's ships to reach this position
+        field = np.logical_and(
+            out_of_vision, self.opp_distance <= self._state.match_step
+        )
+
+        # exclude positions that are too close to our spawn position
+        field = np.logical_and(field, self.distance >= SPACE_SIZE / 2)
+
+        # add opponent's ships that can sap
+        for ship in self._state.opp_fleet:
+            if ship.can_sap():
+                x, y = ship.coordinates
+                field[y, x] = 1
+
+        return field
+
+    @cached_property
+    def possible_targets_for_opp_sap_ships(self):
+        r = Global.UNIT_SAP_RANGE * 2 + 1
+        sap_kernel = np.ones((r, r), dtype=np.float32)
+        field = convolve2d(
+            self.opp_sap_ships_potential_positions,
+            sap_kernel,
+            mode="same",
+            boundary="fill",
+            fillvalue=0,
+        )
+        field = field > 0
+        return field
+
+    @cached_property
+    def direct_targets_for_opp_sap_ships(self):
+        ships_in_opp_vision = np.zeros((SPACE_SIZE, SPACE_SIZE), np.float32)
+        for ship in self._state.fleet:
+            x, y = ship.coordinates
+            if (
+                ship.energy >= 0
+                and self.opp_vision[y, x] > 0
+                and self.possible_targets_for_opp_sap_ships[y, x] > 0
+            ):
+                ships_in_opp_vision[y, x] = 1
+
+        sap_kernel = np.ones((3, 3), dtype=np.float32)
+        field = convolve2d(
+            ships_in_opp_vision,
+            sap_kernel,
+            mode="same",
+            boundary="fill",
+            fillvalue=0,
+        )
+        field = field > 0
         return field
 
 
