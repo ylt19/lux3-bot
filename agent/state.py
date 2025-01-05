@@ -17,6 +17,7 @@ from .base import (
 from .path import ActionType
 from .space import Space, NodeType
 from .fleet import Fleet
+from .field import Field
 
 
 class State:
@@ -41,6 +42,8 @@ class State:
         self._resumable_dijkstra = None
         self._routes = None
 
+        self.field = Field(self)
+
     def update(self, obs):
         self._energy_grid = None
         self._low_energy_grid = None
@@ -49,6 +52,7 @@ class State:
         self._reservation_table = None
         self._resumable_dijkstra = None
         self._routes = None
+        self.field.clear()
 
         if obs["steps"] > 0:
             self._update_step_counters()

@@ -8,6 +8,7 @@ from .base import (
     get_spawn_location,
     nearby_positions,
     cardinal_positions,
+    manhattan_distance,
 )
 from .path import Action, ActionType, apply_action, actions_to_path
 from .space import Node, Space, NodeType
@@ -18,6 +19,8 @@ class Fleet:
         self.team_id: int = team_id
         self.points: int = 0
         self.reward: int = 0
+        self.spawn_position = get_spawn_location(self.team_id)
+
         self.ships = [Ship(unit_id) for unit_id in range(Global.MAX_UNITS)]
 
         self.vision = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int8)
@@ -89,9 +92,8 @@ class Fleet:
         for ship in self.ships:
             self.vision += ship.vision
 
-    @property
-    def spawn_position(self):
-        return get_spawn_location(self.team_id)
+    def spawn_distance(self, x, y):
+        return manhattan_distance(self.spawn_position, (x, y))
 
 
 class Ship:
