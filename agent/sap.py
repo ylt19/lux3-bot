@@ -143,22 +143,21 @@ def prob_opp_on_rewards(state):
     if not Global.ALL_REWARDS_FOUND:
         return 0, set()
 
-    opp_spawn_position = state.opp_fleet.spawn_position
-
     # invisible rewards that can be reachable by the opponent
     reward_nodes = set()
     for reward_node in state.space.reward_nodes:
-        if not reward_node.is_visible and (
-            manhattan_distance(reward_node.coordinates, opp_spawn_position)
-            <= state.match_step
-        ):
-            reward_nodes.add(reward_node)
+        if not reward_node.is_visible:
+            if (
+                state.opp_fleet.spawn_distance(*reward_node.coordinates)
+                <= state.match_step
+            ):
+                reward_nodes.add(reward_node)
 
     # how many rewards will the opponent score according to our vision
     opp_rewards_in_vision = 0
     for ship in state.opp_fleet:
         if ship.node.reward:
-            opp_rewards_in_vision = +1
+            opp_rewards_in_vision += 1
 
     num_opp_ships_with_rewards = state.opp_fleet.reward - opp_rewards_in_vision
 
