@@ -5,6 +5,7 @@ from .heal import Heal
 from .sap import sap
 from .msg import print_msg
 from .evasion import evasion
+from .control import Control
 
 
 def apply_tasks(state):
@@ -58,7 +59,7 @@ def apply_tasks(state):
         print_msg(state)
         return
 
-    evasion(state)
+    # evasion(state)
     sap(state)
 
 
@@ -78,5 +79,8 @@ def generate_tasks(state):
 
     if p.HEAL_TASK:
         tasks += Heal.generate_tasks(state)
+
+    if p.CONTROL_TASK:
+        tasks += Control.generate_tasks(state)
 
     return tasks

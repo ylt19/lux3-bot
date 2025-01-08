@@ -90,6 +90,8 @@ class Global:
         HEAL_OPP_SPAWN_DISTANCE_MULTIPLIER = -1
         HEAL_SHIP_ENERGY_MULTIPLIER = -1
 
+        CONTROL_TASK = True
+
         MSG_TASK = False
         MSG_TASK_STARTED = False
         MSG_TASK_FINISHED = False

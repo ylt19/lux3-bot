@@ -129,16 +129,19 @@ class Field:
         return field
 
     @cached_property
+    def control(self):
+        field = np.logical_or(self.vision > 0, self.rear > 0)
+        field = np.logical_or(field, self.distance < SPACE_SIZE / 2)
+        return field
+
+    @cached_property
     def opp_sap_ships_potential_positions(self):
-        out_of_vision = np.logical_and(self.vision == 0, self.rear == 0)
+        out_of_control = np.logical_not(self.control)
 
         # is it possible for opponent's ships to reach this position
         field = np.logical_and(
-            out_of_vision, self.opp_distance <= self._state.match_step
+            out_of_control, self.opp_distance <= self._state.match_step
         )
-
-        # exclude positions that are too close to our spawn position
-        field = np.logical_and(field, self.distance >= SPACE_SIZE / 2)
 
         # add opponent's ships that can sap
         for ship in self._state.opp_fleet:
@@ -183,6 +186,21 @@ class Field:
             fillvalue=0,
         )
         field = field > 0
+        return field
+
+    @cached_property
+    def vision_gain(self):
+        r = 2 * Global.UNIT_SENSOR_RANGE + 1
+        vision_kernel = np.ones((r, r), dtype=np.float32)
+
+        field = convolve2d(
+            (self.control == 0),
+            vision_kernel,
+            mode="same",
+            boundary="fill",
+            fillvalue=0,
+        )
+
         return field
 
 
