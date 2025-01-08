@@ -1,3 +1,4 @@
+import math
 from collections import defaultdict
 
 from .base import (
@@ -5,138 +6,108 @@ from .base import (
     Global,
     chebyshev_distance,
     nearby_positions,
-    manhattan_distance,
 )
 from .path import Action, ActionType
 from .state import State
 
+SAP_OOV_DAMAGE_TH = 50
 
-class OppShip:
-    def __init__(self, node, unit_id=None, energy=50, probability=1):
-        self.node = node
-        self.unit_id = unit_id
-        self.energy = energy
-        self.probability = probability
 
-    @classmethod
-    def from_ship(cls, ship):
-        return OppShip(
-            node=ship.node, unit_id=ship.unit_id, energy=ship.energy, probability=1
-        )
+def get_sap_damage_th(ship_energy):
+    if ship_energy < 0.75 * Global.MAX_UNIT_ENERGY:
+        return 0.9 * Global.UNIT_SAP_COST
 
-    def __repr__(self):
-        return f"Ship({self.node.coordinates}, {self.energy})"
+    if ship_energy < 0.85 * Global.MAX_UNIT_ENERGY:
+        return 0.5 * Global.UNIT_SAP_COST
+
+    return 0.2 * Global.UNIT_SAP_COST
 
 
 class SapInfo:
     def __init__(self, target):
         self.target = target
-        self.direct_hits: set[OppShip] = set()
-        self.nearby_hits: set[OppShip] = set()
+
+        self.opp_ships = []
+
+        self.oov_direct_hit_prob = 0
+        self.oov_adjacent_targets = set()
+        self.oov_adjacent_hit_probs = []
 
     def __repr__(self):
         return (
-            f"SapInfo(target={self.target.coordinates}, direct={self.direct_hits}, "
-            f"nearby={self.nearby_hits}"
+            f"SapInfo(target={self.target.coordinates}, opp_ships={self.opp_ships}, "
+            f"oov=({self.oov_direct_hit_prob:.2f}, {self.mean_oov_adjacent_hit():.2f}))"
         )
 
-    def empty(self):
-        return len(self.direct_hits) == 0 and len(self.nearby_hits) == 0
+    def mean_oov_adjacent_hit(self):
+        return sum(i * p for i, p in enumerate(self.oov_adjacent_hit_probs))
 
-    def estimate_damage(self):
-        damage = 0
-        for d in self.direct_hits:
-            if d.energy >= 0:
-                damage += Global.UNIT_SAP_COST * d.probability
-        for d in self.nearby_hits:
-            if d.energy >= 0:
-                damage += (
-                    Global.UNIT_SAP_COST
-                    * d.probability
-                    * Global.UNIT_SAP_DROPOFF_FACTOR
-                    * 0.2
-                )
-        return damage
+    def estimate_damage(self, node_to_sap_damage):
+        sap_damage = 0
+        for opp_ship in self.opp_ships:
+            node_damage = node_to_sap_damage.get(opp_ship.node, 0)
 
-
-def sap(state: State):
-    xy_to_opp_ships = find_opp_ships_positions(state)
-
-    for ship in sorted(state.fleet, key=lambda s: -s.energy):
-        if not ship.can_sap():
-            continue
-
-        xy_to_sap_info = {}
-        for xy in nearby_positions(*ship.coordinates, Global.UNIT_SAP_RANGE + 1):
-
-            if xy not in xy_to_opp_ships:
-                continue
-
-            direct_hits = [
-                s for s in xy_to_opp_ships[xy] if s.energy >= 0 and s.probability > 0
-            ]
-            if not direct_hits:
-                continue
-
-            for xy_sap in nearby_positions(*xy, 1):
-                if xy_sap not in xy_to_sap_info:
-                    sap_target = state.space.get_node(*xy_sap)
-                    xy_to_sap_info[xy_sap] = SapInfo(sap_target)
-
-                sap_info = xy_to_sap_info[xy_sap]
-                if xy_sap == xy:
-                    for opp_ship in direct_hits:
-                        sap_info.direct_hits.add(opp_ship)
+            if opp_ship.energy - node_damage >= 0:
+                if opp_ship.node == self.target:
+                    if opp_ship.can_move():
+                        sap_damage += (
+                            Global.UNIT_SAP_COST * Global.UNIT_SAP_DROPOFF_FACTOR
+                        )
+                    else:
+                        sap_damage += Global.UNIT_SAP_COST
                 else:
-                    for opp_ship in direct_hits:
-                        sap_info.nearby_hits.add(opp_ship)
+                    if opp_ship.can_move():
+                        sap_damage += (
+                            Global.UNIT_SAP_COST * Global.UNIT_SAP_DROPOFF_FACTOR * 0.3
+                        )
+                    else:
+                        sap_damage += (
+                            Global.UNIT_SAP_COST * Global.UNIT_SAP_DROPOFF_FACTOR
+                        )
 
-        if not xy_to_sap_info:
-            continue
+        target_damage = node_to_sap_damage.get(self.target, 0)
+        if SAP_OOV_DAMAGE_TH - target_damage >= 0:
+            sap_damage += self.oov_direct_hit_prob * Global.UNIT_SAP_COST
 
-        targets = [
-            x
-            for x in xy_to_sap_info.values()
-            if not x.empty()
-            and chebyshev_distance(x.target.coordinates, ship.coordinates)
-            <= Global.UNIT_SAP_RANGE
-        ]
-        targets = sorted(targets, key=lambda x: -x.estimate_damage())
-        if not targets:
-            continue
+        for node in self.oov_adjacent_targets:
+            node_damage = node_to_sap_damage.get(node, 0)
 
-        target = targets[0]
-        dx = target.target.coordinates[0] - ship.node.x
-        dy = target.target.coordinates[1] - ship.node.y
+            if SAP_OOV_DAMAGE_TH - node_damage >= 0:
+                sap_damage += (
+                    self.mean_oov_adjacent_hit()
+                    * Global.UNIT_SAP_COST
+                    * Global.UNIT_SAP_DROPOFF_FACTOR
+                    / len(self.oov_adjacent_targets)
+                )
 
-        ship.action_queue = [Action(ActionType.sap, dx, dy)]
-
-        # log(
-        #     f"add sap {ship}->{dx, dy}, target={target.direct_hits, target.nearby_hits}"
-        # )
-        # log(xy_to_opp_ships)
-
-        for opp_ship in target.direct_hits:
-            opp_ship.energy -= Global.UNIT_SAP_COST
-
-        for opp_ship in target.nearby_hits:
-            opp_ship.energy -= Global.UNIT_SAP_COST * Global.UNIT_SAP_DROPOFF_FACTOR
+        return sap_damage
 
 
-def find_opp_ships_positions(state):
-    xy_to_opp_ships = defaultdict(list)
-    for opp_ship in state.opp_fleet:
-        if opp_ship.energy >= 0:
-            xy_to_opp_ships[opp_ship.coordinates].append(OppShip.from_ship(opp_ship))
+def binomial_coefficient(x, y):
+    return math.factorial(x) / (math.factorial(y) * math.factorial(x - y))
 
-    num_opp_ships_with_rewards, reward_nodes = prob_opp_on_rewards(state)
-    if reward_nodes and num_opp_ships_with_rewards > 0:
-        prob = num_opp_ships_with_rewards / len(reward_nodes)
-        for node in reward_nodes:
-            opp_ship = OppShip(node=node, probability=prob)
-            xy_to_opp_ships[node.coordinates].append(opp_ship)
 
-    return xy_to_opp_ships
+def hypergeometric_distribution(n, b, s, x):
+    """
+    Calculate the probability of finding exactly 'x' balls in 's' randomly selected baskets.
+
+    Parameters:
+    - n: Total number of baskets.
+    - b: Total number of balls (each basket can contain at most 1 ball).
+    - s: Number of baskets randomly selected.
+    - x: The exact number of balls you want to find in the selected baskets.
+
+    Returns:
+    - float: The probability of finding exactly 'x' balls in the 's' selected baskets.
+    """
+    if b < x or n < s or n < b or s < x or n - s < b - x:
+        return 0.0
+
+    return (
+        binomial_coefficient(s, x)
+        * binomial_coefficient(n - s, b - x)
+        / binomial_coefficient(n, b)
+    )
 
 
 def prob_opp_on_rewards(state):
@@ -162,3 +133,126 @@ def prob_opp_on_rewards(state):
     num_opp_ships_with_rewards = state.opp_fleet.reward - opp_rewards_in_vision
 
     return num_opp_ships_with_rewards, reward_nodes
+
+
+def create_sap_targets(state: State):
+    node_to_opp_ships = defaultdict(list)
+    for opp_ship in state.opp_fleet:
+        if opp_ship.energy >= 0:
+            node_to_opp_ships[opp_ship.node].append(opp_ship)
+
+    sap_nodes = set()
+    for ship_node in node_to_opp_ships:
+        for xy_sap in nearby_positions(*ship_node.coordinates, 1):
+            sap_nodes.add(state.space.get_node(*xy_sap))
+
+    num_opp_ships_with_rewards, reward_nodes = prob_opp_on_rewards(state)
+    for reward_node in reward_nodes:
+        for xy_sap in nearby_positions(*reward_node.coordinates, 1):
+            sap_nodes.add(state.space.get_node(*xy_sap))
+
+    sap_targets = []
+    for target in sap_nodes:
+
+        sap_info = SapInfo(target)
+
+        local_opp_ships = []
+        for xy_sap in nearby_positions(*target.coordinates, 1):
+            n = state.space.get_node(*xy_sap)
+            for opp_ship in node_to_opp_ships.get(n, []):
+                local_opp_ships.append(opp_ship)
+
+        if local_opp_ships:
+            sap_info.opp_ships = local_opp_ships
+
+        if num_opp_ships_with_rewards and reward_nodes:
+            oov_direct_hit_prob, oov_adjacent_hit_probs, oov_adjacent_targets = (
+                calculate_out_of_vision_probs(
+                    state, target, num_opp_ships_with_rewards, reward_nodes
+                )
+            )
+            if oov_direct_hit_prob > 0 or (
+                oov_adjacent_hit_probs and any(x > 0 for x in oov_adjacent_hit_probs)
+            ):
+                sap_info.oov_adjacent_targets = set(oov_adjacent_targets)
+                sap_info.oov_direct_hit_prob = oov_direct_hit_prob
+                sap_info.oov_adjacent_hit_probs = oov_adjacent_hit_probs
+
+        sap_targets.append(sap_info)
+
+    return sap_targets
+
+
+def calculate_out_of_vision_probs(
+    state, target, num_opp_ships_with_rewards, reward_nodes
+):
+    oov_direct_hit_prob = 0
+    if target in reward_nodes:
+        oov_direct_hit_prob = num_opp_ships_with_rewards / len(reward_nodes)
+
+    oov_adjacent_targets = []
+    num_adjacent_reward_nodes = 0
+    for xy_sap in nearby_positions(*target.coordinates, 1):
+        n = state.space.get_node(*xy_sap)
+        if n in reward_nodes and n != target:
+            oov_adjacent_targets.append(n)
+            num_adjacent_reward_nodes += 1
+
+    oov_adjacent_hit_probs = []
+    for num_ships in range(num_adjacent_reward_nodes + 1):
+        p = hypergeometric_distribution(
+            len(reward_nodes),
+            num_opp_ships_with_rewards,
+            num_adjacent_reward_nodes,
+            num_ships,
+        )
+        oov_adjacent_hit_probs.append(p)
+
+    return oov_direct_hit_prob, oov_adjacent_hit_probs, oov_adjacent_targets
+
+
+def sap(state: State):
+    sap_targets = create_sap_targets(state)
+    if not sap_targets:
+        return
+
+    node_to_sap_damage = defaultdict(int)
+
+    for ship in sorted(state.fleet, key=lambda s: -s.energy):
+        if not ship.can_sap():
+            continue
+
+        ship_sap_targets = [
+            x
+            for x in sap_targets
+            if chebyshev_distance(ship.coordinates, x.target.coordinates)
+            <= Global.UNIT_SAP_RANGE
+        ]
+        if not ship_sap_targets:
+            continue
+
+        ship_sap_targets = sorted(
+            ship_sap_targets, key=lambda x: -x.estimate_damage(node_to_sap_damage)
+        )
+
+        sap_target = ship_sap_targets[0]
+
+        damage = sap_target.estimate_damage(node_to_sap_damage)
+
+        if damage < get_sap_damage_th(ship.energy):
+            continue
+
+        target_node = sap_target.target
+
+        dx = target_node.coordinates[0] - ship.node.x
+        dy = target_node.coordinates[1] - ship.node.y
+
+        ship.action_queue = [Action(ActionType.sap, dx, dy)]
+
+        node_to_sap_damage[target_node] += Global.UNIT_SAP_COST
+        for xy_sap in nearby_positions(*target_node.coordinates, 1):
+            nearby_node = state.space.get_node(*xy_sap)
+            if nearby_node != target_node:
+                node_to_sap_damage[nearby_node] += (
+                    Global.UNIT_SAP_COST * Global.UNIT_SAP_DROPOFF_FACTOR
+                )
