@@ -1,20 +1,20 @@
-from copy import copy, deepcopy
+from copy import deepcopy
 
 import numpy as np
 from collections import defaultdict
-from pathfinding import Grid, AStar, ReservationTable, ResumableDijkstra
+from pathfinding import AStar
 from pathfinding.visualization import animate_grid
 
 from .base import (
     log,
     Global,
     Colors,
-    warp_point,
     set_game_prams,
     get_spawn_location,
     chebyshev_distance,
 )
 from .path import ActionType
+from .grid import Grid
 from .space import Space, NodeType
 from .fleet import Fleet
 from .field import Field
@@ -32,25 +32,15 @@ class State:
         self.fleet = Fleet(team_id)
         self.opp_fleet = Fleet(self.opp_team_id)
 
-        self._obstacles_movement_status = []
-
-        self._energy_grid = None
-        self._low_energy_grid = None
-        self._energy_gain_grid = None
-        self._obstacle_grid = None
         self._reservation_table = None
-        self._resumable_dijkstra = None
         self._routes = None
 
+        self.grid = Grid(self)
         self.field = Field(self)
 
     def update(self, obs):
-        self._energy_grid = None
-        self._low_energy_grid = None
-        self._energy_gain_grid = None
-        self._obstacle_grid = None
         self._reservation_table = None
-        self._resumable_dijkstra = None
+
         self._routes = None
 
         if obs["steps"] > 0:
@@ -95,6 +85,8 @@ class State:
             )
 
         self._update_game_params()
+
+        self.grid = Grid(self)
         self.field = Field(self)
 
     def _update_game_params(self):
@@ -128,6 +120,10 @@ class State:
 
     def steps_left_in_match(self) -> int:
         return Global.MAX_STEPS_IN_MATCH - self.match_step
+
+    def get_fleet(self, team_id):
+        assert team_id == 0 or team_id == 1
+        return self.fleet if team_id == self.team_id else self.opp_fleet
 
     def copy(self) -> "State":
         copy_state = State(self.team_id)
@@ -223,81 +219,15 @@ class State:
             )
 
         anim = animate_grid(
-            self.energy_grid,
+            self.grid.energy,
             agents=agents,
-            reservation_table=self.reservation_table,
+            reservation_table=self.grid.reservation_table,
             show_weights=True,
             size=8,
         )
 
         log(f"Save state animation as `{file_name}`")
         anim.save(file_name)
-
-    @property
-    def energy_grid(self):
-        if self._energy_grid is None:
-            self._energy_grid = create_energy_grid(
-                self.space, Global.Params.ENERGY_TO_WEIGHT_GROUND
-            )
-        return self._energy_grid
-
-    @property
-    def low_energy_grid(self):
-        if self._low_energy_grid is None:
-            self._low_energy_grid = create_energy_grid(
-                self.space, ground=Global.UNIT_MOVE_COST
-            )
-        return self._low_energy_grid
-
-    @property
-    def energy_gain_grid(self):
-        if self._energy_gain_grid is None:
-            self._energy_gain_grid = create_energy_gain_grid(
-                self.space, Global.Params.ENERGY_TO_WEIGHT_GROUND
-            )
-        return self._energy_gain_grid
-
-    @property
-    def obstacle_grid(self):
-        if self._obstacle_grid is None:
-            self._obstacle_grid = create_grid_with_obstacles(
-                self.space, Global.Params.ENERGY_TO_WEIGHT_GROUND
-            )
-        return self._obstacle_grid
-
-    @property
-    def reservation_table(self):
-        if self._reservation_table is None:
-            self._reservation_table = ReservationTable(self.energy_grid)
-
-            add_dynamic_environment(self._reservation_table, self)
-
-        return self._reservation_table
-
-    def get_resumable_dijkstra(self, unit_id, team_id=None):
-        if self._resumable_dijkstra is None:
-            self._resumable_dijkstra = [
-                [None for _ in range(Global.MAX_UNITS)],
-                [None for _ in range(Global.MAX_UNITS)],
-            ]
-
-        if team_id is None:
-            team_id = self.team_id
-
-        unit_to_rs = self._resumable_dijkstra[team_id]
-        if unit_id in unit_to_rs:
-            return unit_to_rs[unit_id]
-
-        fleet = self.fleet if team_id == self.team_id else self.opp_fleet
-        ship = fleet.ships[unit_id]
-        if ship.node is None:
-            return
-
-        grid = copy(self.obstacle_grid)
-        grid.remove_obstacle(ship.coordinates)
-        rs = ResumableDijkstra(grid, ship.coordinates)
-        unit_to_rs[unit_id] = rs
-        return rs
 
     def get_match_status(self):
         # returns:
@@ -361,94 +291,12 @@ class State:
             return self._routes[(start, goal, with_obstacles)]
 
         if with_obstacles:
-            route = AStar(self.obstacle_grid).find_path(start, goal)
+            route = AStar(self.grid.energy_gain_with_asteroids).find_path(start, goal)
         else:
-            route = AStar(self.energy_gain_grid).find_path(start, goal)
+            route = AStar(self.grid.energy_gain).find_path(start, goal)
 
         self._routes[(start, goal, with_obstacles)] = route
         return route
-
-
-def add_dynamic_environment(rt, state):
-    shift = Global.OBSTACLE_MOVEMENT_DIRECTION
-
-    for node in state.space:
-        if node.type == NodeType.asteroid:
-            point = node.coordinates
-            path = []
-            match_step = state.match_step
-            global_step = state.global_step
-            while match_step <= Global.MAX_STEPS_IN_MATCH:
-                if (
-                    len(path) > 0
-                    and (global_step - 1) % Global.OBSTACLE_MOVEMENT_PERIOD == 0
-                ):
-                    rt.add_vertex_constraint(time=len(path), node=point)
-                    point = warp_point(point[0] + shift[0], point[1] + shift[1])
-                path.append(point)
-                match_step += 1
-                global_step += 1
-
-            rt.add_path(path, reserve_destination=False)
-
-        elif node.type == NodeType.nebula and Global.NEBULA_ENERGY_REDUCTION != 0:
-            point = node.coordinates
-            path = []
-            match_step = state.match_step
-            global_step = state.global_step
-            while match_step <= Global.MAX_STEPS_IN_MATCH:
-                if (
-                    len(path) > 1
-                    and (global_step - 2) % Global.OBSTACLE_MOVEMENT_PERIOD == 0
-                ):
-                    point = warp_point(point[0] + shift[0], point[1] + shift[1])
-                path.append(point)
-                match_step += 1
-                global_step += 1
-
-            rt.add_weight_path(path, weight=Global.NEBULA_ENERGY_REDUCTION)
-
-    return rt
-
-
-def energy_to_weight(energy, ground):
-    if energy < ground:
-        return ground - energy + 1
-    return Global.Params.ENERGY_TO_WEIGHT_BASE ** (ground - energy)
-
-
-def create_energy_grid(space, ground):
-    weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
-    for node in space:
-        energy = node.energy
-        if energy is None:
-            energy = Global.HIDDEN_NODE_ENERGY
-        weights[node.y][node.x] = energy_to_weight(energy, ground)
-
-    return Grid(weights, pause_action_cost="node.weight")
-
-
-def create_energy_gain_grid(space, ground):
-    weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
-    for node in space:
-        weights[node.y][node.x] = energy_to_weight(node.energy_gain, ground)
-
-    return Grid(weights, pause_action_cost="node.weight")
-
-
-def create_grid_with_obstacles(space, ground):
-    weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
-
-    for node in space:
-
-        if not node.is_walkable:
-            w = -1
-        else:
-            w = energy_to_weight(node.energy_gain, ground)
-
-        weights[node.y][node.x] = w
-
-    return Grid(weights, pause_action_cost="node.weight")
 
 
 def show_map(space, my_fleet=None, opp_fleet=None, only_visible=True):

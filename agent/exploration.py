@@ -40,7 +40,7 @@ class RelicFinder(Task):
         if not ship.can_move():
             return 0
 
-        rs = state.get_resumable_dijkstra(ship.unit_id)
+        rs = state.grid.resumable_search(ship.unit_id)
         path = rs.find_path(self.target.coordinates)
         if not path:
             return 0
@@ -110,7 +110,7 @@ class VoidSeeker(Task):
         if not ship.can_move():
             return 0
 
-        rs = state.get_resumable_dijkstra(ship.unit_id)
+        rs = state.grid.resumable_search(ship.unit_id)
 
         target_node, min_distance = None, float("inf")
         for node in get_unexplored_for_reward_nodes(state, self.relic_node):
@@ -141,7 +141,7 @@ class VoidSeeker(Task):
 
     def apply(self, state, ship):
 
-        rs = state.get_resumable_dijkstra(ship.unit_id)
+        rs = state.grid.resumable_search(ship.unit_id)
 
         target_node, min_distance = None, float("inf")
         for node in get_unexplored_for_reward_nodes(state, self.relic_node):

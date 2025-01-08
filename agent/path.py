@@ -138,8 +138,8 @@ def allowed_movements(x, y, space):
 
 
 def find_path_in_dynamic_environment(state, start, goal, ship_energy=None, grid=None):
-    grid = grid or state.energy_grid
-    reservation_table = copy.copy(state.reservation_table)
+    grid = grid or state.grid.energy
+    reservation_table = copy.copy(state.grid.reservation_table)
 
     if ship_energy is not None:
         _add_opp_ships(reservation_table, state, ship_energy)

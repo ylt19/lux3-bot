@@ -13,7 +13,7 @@ def evasion(state):
         if not ship.can_move():
             continue
 
-        rs = state.get_resumable_dijkstra(ship.unit_id)
+        rs = state.grid.resumable_search(ship.unit_id)
 
         min_distance, best_target = float("inf"), None
         for target in nearby_positions(x, y, SPACE_SIZE):

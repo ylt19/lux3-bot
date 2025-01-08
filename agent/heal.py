@@ -75,7 +75,7 @@ class Heal(Task):
     def find_target(self, state):
         ship = self.ship
 
-        rs = state.get_resumable_dijkstra(ship.unit_id)
+        rs = state.grid.resumable_search(ship.unit_id)
         steps_left_in_match = state.steps_left_in_match()
 
         node_to_score = {}
@@ -91,9 +91,10 @@ class Heal(Task):
             for node in reward_nodes:
                 reward_array[node.y, node.x] = 1
 
+            r = Global.UNIT_SAP_RANGE * 2 + 1
             reward_array = convolve2d(
                 reward_array,
-                np.ones((Global.UNIT_SAP_RANGE, Global.UNIT_SAP_RANGE), dtype=np.int32),
+                np.ones((r, r), dtype=np.int32),
                 mode="same",
                 boundary="fill",
                 fillvalue=0,

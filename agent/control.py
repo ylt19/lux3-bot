@@ -48,7 +48,7 @@ class Control(Task):
         # if ship.energy < 100:
         #     return 0
 
-        rs = state.get_resumable_dijkstra(ship.unit_id)
+        rs = state.grid.resumable_search(ship.unit_id)
         path = rs.find_path(self.target.coordinates)
         energy_needed = estimate_energy_cost(state.space, path)
 
