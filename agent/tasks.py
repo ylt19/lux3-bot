@@ -1,6 +1,5 @@
 from .base import log, Global
 from .exploration import VoidSeeker, RelicFinder
-from .exploitation import VoidSinger
 from .heal import Heal
 from .sap import sap
 from .msg import print_msg
@@ -74,13 +73,10 @@ def generate_tasks(state):
     if p.VOID_SEEKER_TASK:
         tasks += VoidSeeker.generate_tasks(state)
 
-    if p.VOID_SINGER_TASK:
-        tasks += VoidSinger.generate_tasks(state)
+    if p.CONTROL_TASK:
+        tasks += Control.generate_tasks(state)
 
     if p.HEAL_TASK:
         tasks += Heal.generate_tasks(state)
-
-    if p.CONTROL_TASK:
-        tasks += Control.generate_tasks(state)
 
     return tasks

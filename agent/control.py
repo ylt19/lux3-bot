@@ -1,6 +1,3 @@
-import numpy as np
-from scipy.signal import convolve2d
-
 from .base import Task, Global, SPACE_SIZE, manhattan_distance
 from .path import (
     estimate_energy_cost,
@@ -11,25 +8,35 @@ from .path import (
 
 class Control(Task):
 
-    def __init__(self, target, energy_gain):
+    def __init__(self, target):
         super().__init__(target)
-        self.energy_gain = energy_gain
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.target.coordinates, self.energy_gain})"
+        if self.reward:
+            return f"Reward({self.target.coordinates})"
+        return f"Control({self.target.coordinates})"
+
+    @property
+    def reward(self):
+        return self.target.reward
 
     @classmethod
     def generate_tasks(cls, state):
         if not state.space.reward_nodes:
             return []
 
-        control_positions = find_control_points(state)
+        control_positions = set(
+            state.field.reward_positions + state.field.control_positions
+        )
+
+        for ship in state.fleet:
+            if isinstance(ship.task, Control):
+                p = ship.task.target.coordinates
+                if p in control_positions:
+                    control_positions.remove(p)
 
         tasks = []
         for x, y in control_positions:
-            vision_gain = state.field.vision_gain[y, x]
-            if vision_gain < 9:
-                continue
 
             min_reward_distance = min(
                 manhattan_distance(node.coordinates, (x, y))
@@ -40,22 +47,53 @@ class Control(Task):
                 continue
 
             target = state.space.get_node(x, y)
-            tasks.append(Control(target, target.energy_gain))
+            tasks.append(Control(target))
 
         return tasks
 
     def evaluate(self, state, ship):
-        # if ship.energy < 100:
-        #     return 0
+        if not ship.can_move():
+            if ship.node == self.target:
+                return 1000
+            else:
+                return 0
+
+        if ship.energy < state.field.opp_protection[self.target.y, self.target.x]:
+            return 0
 
         rs = state.grid.resumable_search(ship.unit_id)
         path = rs.find_path(self.target.coordinates)
-        energy_needed = estimate_energy_cost(state.space, path)
+        if not path:
+            return 0
+        if len(path) > state.steps_left_in_match():
+            return 0
 
-        return 700 + (-5) * len(path) + (-0.2) * energy_needed
+        energy_needed = estimate_energy_cost(state.space, path)
+        spawn_distance = state.fleet.spawn_distance(*self.target.coordinates)
+        middle_lane_distance = max(spawn_distance - SPACE_SIZE, 0)
+
+        p = Global.Params
+        score = (
+            p.CONTROL_INIT_SCORE
+            + p.CONTROL_REWARD_SCORE * self.reward
+            + p.CONTROL_PATH_LENGTH_MULTIPLIER * len(path)
+            + p.CONTROL_ENERGY_COST_MULTIPLIER * energy_needed
+            + p.CONTROL_NODE_ENERGY_MULTIPLIER * self.target.energy_gain
+            + p.CONTROL_MIDDLE_LANE_DISTANCE_MULTIPLIER * middle_lane_distance
+        )
+        return score
 
     def completed(self, state, ship):
-        if self.target.energy_gain != self.energy_gain:
+        if ship.energy < state.field.opp_protection[self.target.y, self.target.x]:
+            return True
+        if not ship.can_move() and ship.node != self.target:
+            return True
+
+        p = self.target.coordinates
+        if (
+            p not in state.field.reward_positions
+            and p not in state.field.control_positions
+        ):
             return True
         return False
 
@@ -69,83 +107,15 @@ class Control(Task):
         if not path:
             return False
 
-        ship.action_queue = path_to_actions(path)
-        return True
-
-
-def find_control_points(state):
-    vision_by_ship = 5  # 2 * Global.UNIT_SENSOR_RANGE + 1
-    min_vision_gain = 15
-
-    vision_kernel = np.ones((vision_by_ship, vision_by_ship), dtype=np.float32)
-
-    control = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
-
-    for ship in state.fleet:
-        if isinstance(ship.task, Control):
-            target = ship.task.target
-            x, y = target.coordinates
-
-            ship_control = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
-            ship_control[y, x] = 1
-
-            ship_control = convolve2d(
-                ship_control,
-                vision_kernel,
-                mode="same",
-                boundary="fill",
-                fillvalue=0,
+        energy_needed = estimate_energy_cost(state.space, path)
+        if energy_needed > ship.energy:
+            path = find_path_in_dynamic_environment(
+                state,
+                start=ship.coordinates,
+                goal=self.target.coordinates,
+                ship_energy=ship.energy,
+                grid=state.grid.energy_with_low_ground,
             )
 
-            control = np.logical_or(control, ship_control)
-
-    energy_gain = state.field.energy_gain
-
-    positions = []
-
-    while True:
-
-        vision_gain = convolve2d(
-            (control == 0),
-            vision_kernel,
-            mode="same",
-            boundary="fill",
-            fillvalue=0,
-        )
-
-        max_gain = vision_gain.max()
-        if max_gain < min_vision_gain:
-            break
-
-        energy_left = np.array(energy_gain)
-        energy_left[np.where(vision_gain < min_vision_gain)] = (
-            Global.MIN_ENERGY_PER_TILE - 1
-        )
-
-        # show_field(energy_left)
-
-        max_energy = energy_left.max()
-        if max_energy < 0:
-            break
-
-        yy, xx = np.where(energy_left == max_energy)
-        y, x = int(yy[0]), int(xx[0])
-
-        positions.append((x, y))
-
-        # print(best_position, max_energy)
-
-        ship_control = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
-        ship_control[y, x] = 1
-
-        ship_control = convolve2d(
-            ship_control,
-            vision_kernel,
-            mode="same",
-            boundary="fill",
-            fillvalue=0,
-        )
-
-        control = np.logical_or(control, ship_control)
-
-    return positions
+        ship.action_queue = path_to_actions(path)
+        return True

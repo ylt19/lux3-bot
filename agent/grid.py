@@ -11,7 +11,10 @@ class Grid:
     def __init__(self, state):
         self._state = state
 
-        self._resumable_search = None
+        self._resumable_search = [
+            [None for _ in range(Global.MAX_UNITS)],
+            [None for _ in range(Global.MAX_UNITS)],
+        ]
 
     @property
     def space(self):
@@ -76,12 +79,6 @@ class Grid:
         return Global.Params.ENERGY_TO_WEIGHT_BASE ** (ground - energy)
 
     def resumable_search(self, unit_id, team_id=None):
-        if self._resumable_search is None:
-            self._resumable_search = [
-                [None for _ in range(Global.MAX_UNITS)],
-                [None for _ in range(Global.MAX_UNITS)],
-            ]
-
         if team_id is None:
             team_id = self._state.team_id
 
