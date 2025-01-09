@@ -292,6 +292,7 @@ class Field:
             control = add_control(control, p)
 
         energy_gain = self.energy_gain
+        asteroid = self.asteroid
 
         positions = []
 
@@ -313,6 +314,7 @@ class Field:
             energy_left[np.where(vision_gain < min_vision_gain)] = (
                 Global.MIN_ENERGY_PER_TILE - 1
             )
+            energy_left[np.where(asteroid)] = Global.MIN_ENERGY_PER_TILE - 1
 
             # show_field(energy_left)
 
