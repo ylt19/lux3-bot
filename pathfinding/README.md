@@ -41,6 +41,8 @@ To enable new option, use the keyword "node.weight" like this:
 
     Сan be used in the SpaceTimeAStar algorithm when searching for the shortest path in a dynamic environment where these dynamics can be predicted.
 
+- Add ResumableSpaceTimeDijkstra, Space-time extension of ResumableDijkstra with ReservationTable support
+
 ### License
 The code in this directory is under the Apache License 2.0, as originally licensed in w9PcJLyb/pathfinding.
 For more details, please refer to the [LICENSE file](https://github.com/w9PcJLyb/pathfinding/blob/main/LICENSE) in w9PcJLyb/pathfinding.

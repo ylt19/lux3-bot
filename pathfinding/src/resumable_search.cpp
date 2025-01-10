@@ -260,3 +260,141 @@ void ResumableDijkstra::search(int node_id) {
     Node& node = nodes_[node_id];
     node.closed = true;
 }
+
+ResumableSpaceTimeDijkstra::ResumableSpaceTimeDijkstra(
+    AbsGraph *graph,
+    int start,
+    int terminal_time,
+    const ReservationTable *rt
+) : ResumableSearch(graph, start, false) {
+
+    graph_size_ = graph->size();
+    terminal_time_ = terminal_time;
+    rt_ = rt;
+
+    nodes_.emplace(start, Node(nullptr, start, 0, 0));
+    openset_.push({0, &nodes_.at(start)});
+}
+
+void ResumableSpaceTimeDijkstra::clear() {
+    openset_ = Queue();
+    nodes_.clear();
+}
+
+void ResumableSpaceTimeDijkstra::set_start_node(int start) {
+    if (start_ != start) {
+        start_ = start;
+        clear();
+
+        nodes_.emplace(start, Node(nullptr, start, 0, 0));
+        openset_.push({0, &nodes_.at(start)});
+    }
+}
+
+double ResumableSpaceTimeDijkstra::distance(int node_id) {
+    Node* node = nullptr;
+    for (int time = 0; time <= terminal_time_; time++) {
+        int st = node_id + time * graph_size_;
+        if (nodes_.count(st)) {
+            node = &nodes_[st];
+            break;
+        }
+    }
+
+    if (!node || !node->closed)
+        node = search(node_id);
+
+    if (node)
+        return node->distance;
+
+    return -1;  // inf
+}
+
+Path ResumableSpaceTimeDijkstra::reconstruct_path(Node* node) {
+    Path path = {node->node_id};
+    while (node->parent != nullptr) {
+        node = node->parent;
+        path.push_back(node->node_id);
+    }
+    std::reverse(path.begin(), path.end());
+    return path;
+}
+
+
+Path ResumableSpaceTimeDijkstra::find_path(int node_id) {
+    Node* node = nullptr;
+    for (int time = 0; time <= terminal_time_; time++) {
+        int st = node_id + time * graph_size_;
+        if (nodes_.count(st)) {
+            node = &nodes_[st];
+            break;
+        }
+    }
+
+    if (!node || !node->closed)
+        node = search(node_id);
+
+    if (node)
+        return reconstruct_path(node);
+
+    return {};
+}
+
+ResumableSpaceTimeDijkstra::Node* ResumableSpaceTimeDijkstra::search(int goal) {
+    // cout << "start search to " << graph->node_to_string(goal) << endl;
+
+    auto process_node = [&] (int node_id, double cost, Node* current) {
+        int time = current->time + 1;
+        double distance = current->distance + cost + rt_->get_additional_weight(time, node_id);
+
+        int st = node_id + time * graph_size_;
+        if (!nodes_.count(st)) {
+            // cout << "add node " << graph->node_to_string(node_id);
+            // cout << " time=" << time << " distance=" << distance << endl;
+            nodes_.emplace(st, Node(current, node_id, time, distance));
+            openset_.push({distance, &nodes_.at(st)});
+        }
+        else if (nodes_.at(st).distance > distance) {
+            // cout << "update node " << graph->node_to_string(node_id);
+            // cout << " time=" << time << " distance=" << distance << endl;
+            Node& n = nodes_.at(st);
+            n.distance = distance;
+            n.parent = current;
+            openset_.push({distance, &n});
+        }
+    };
+
+    while (!openset_.empty()) {
+        auto [distance, current] = openset_.top();
+        openset_.pop();
+
+        int time = current->time;
+
+        // cout << " - explore node " << graph->node_to_string(current->node_id);
+        // cout << " time=" << time << " distance=" << distance << endl;
+
+        if (current->closed)
+            continue;
+
+        // expand node
+        if (time < terminal_time_) {
+            // pause action
+            if (!rt_->is_reserved(time + 1, current->node_id))
+                process_node(current->node_id, graph->get_pause_action_cost(current->node_id), current);
+
+            // movement actions
+            auto reserved_edges = rt_->get_reserved_edges(time, current->node_id);
+            for (auto &[node_id, cost] : graph->get_neighbors(current->node_id)) {
+                if (!reserved_edges.count(node_id) && !rt_->is_reserved(time + 1, node_id))
+                    process_node(node_id, cost, current);
+            }
+        }
+
+        current->closed = true;
+
+        if (current->node_id == goal)
+            return current;
+    }
+
+    return nullptr;
+}

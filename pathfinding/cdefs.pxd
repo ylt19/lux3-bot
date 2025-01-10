@@ -153,6 +153,13 @@ cdef extern from "src/include/resumable_search.h":
         int start_node()
         void set_start_node(int)
 
+    cdef cppclass ResumableSpaceTimeDijkstra:
+        ResumableSpaceTimeDijkstra(AbsGraph*, int, int, ReservationTable*) except +
+        double distance(int)
+        vector[int] find_path(int)
+        int start_node()
+        void set_start_node(int)
+
 
 cdef extern from "src/space_time_a_star.cpp":
     pass

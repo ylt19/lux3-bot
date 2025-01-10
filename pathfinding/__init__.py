@@ -8,5 +8,6 @@ from .cpf import (
     ResumableDijkstra,
     SpaceTimeAStar,
     ReservationTable,
+    ResumableSpaceTimeDijkstra,
 )
 from .diagonal_movement import DiagonalMovement

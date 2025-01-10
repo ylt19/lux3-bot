@@ -1,6 +1,8 @@
 #pragma once
 
+#include <unordered_map>
 #include "core.h"
+#include "reservation_table.h"
 
 
 class ResumableSearch {
@@ -115,4 +117,40 @@ class ResumableAStar : public ResumableSearch {
         void search(int node_id);
         void clear();
         Path reconstruct_path(int node_id);
+};
+
+class ResumableSpaceTimeDijkstra : public ResumableSearch {
+
+    struct Node {
+        Node* parent;
+        int node_id;
+        int time;
+        double distance;
+        bool closed;
+
+        Node() : parent(nullptr), node_id(-1), time(0), distance(0), closed(false) {}
+        Node(Node* parent, int node_id, int time, double distance) :
+            parent(parent), node_id(node_id), time(time), distance(distance), closed(false) {}
+    };
+
+    typedef pair<double, Node*> key;
+    typedef priority_queue<key, vector<key>, std::greater<key>> Queue;
+
+    public:
+        ResumableSpaceTimeDijkstra(AbsGraph* graph, int start, int terminal_time, const ReservationTable *rt);
+        double distance(int node_id);
+        Path find_path(int node_id);
+        void set_start_node(int start);
+
+    private:
+        int graph_size_ = 0;
+        int terminal_time_ = 0;
+        const ReservationTable* rt_;
+
+        Queue openset_;
+        std::unordered_map<int, Node> nodes_;
+
+        void clear();
+        Node* search(int node_id);
+        Path reconstruct_path(Node* node);
 };

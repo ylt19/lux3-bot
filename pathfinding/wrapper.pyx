@@ -855,3 +855,53 @@ cdef class ReservationTable:
         rt = ReservationTable(self.graph)
         rt._obj = new cdefs.ReservationTable(dereference(self._obj))
         return rt
+
+
+cdef class ResumableSpaceTimeDijkstra:
+    cdef cdefs.ResumableSpaceTimeDijkstra* _obj
+    cdef public _AbsGraph graph
+
+    def __cinit__(
+        self,
+        _AbsGraph graph,
+        start_node,
+        ReservationTable reservation_table,
+        int search_depth=100,
+    ):
+        self.graph = graph
+        self._obj = new cdefs.ResumableSpaceTimeDijkstra(
+            graph._baseobj,
+            to_node_id(graph, start_node),
+            search_depth,
+            self._to_crt(reservation_table),
+        )
+
+    cdef cdefs.ReservationTable* _to_crt(self, ReservationTable reservation_table):
+        cdef cdefs.ReservationTable* crt
+        if reservation_table.graph.size != self.graph.size:
+            raise ValueError("Can't use this reservation table, the sizes of the graphs don't match")
+        crt = reservation_table._obj
+        return crt
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(graph={self.graph}, start_node={self.start_node})"
+
+    def __dealloc__(self):
+        del self._obj
+
+    @property
+    def start_node(self):
+        return to_python_node(self.graph, self._obj.start_node())
+
+    @start_node.setter
+    def start_node(self, start_node):
+        self._obj.set_start_node(to_node_id(self.graph, start_node))
+
+    def distance(self, node):
+        d = self._obj.distance(to_node_id(self.graph, node))
+        return d if d >= 0 else float("inf")
+
+    def find_path(self, node):
+        g = self.graph
+        path = self._obj.find_path(to_node_id(g, node))
+        return [to_python_node(g, node_id) for node_id in path]
