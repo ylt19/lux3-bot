@@ -1,10 +1,10 @@
 import copy
 import numpy as np
 from functools import cached_property
-from pathfinding import Grid as w9_Grid, ResumableDijkstra, ReservationTable
+from pathfinding import Grid as w9_Grid, ResumableSpaceTimeDijkstra, ReservationTable
 
 from .path import NodeType
-from .base import Global, warp_point
+from .base import Global, warp_point, cardinal_positions
 
 
 class Grid:
@@ -12,6 +12,10 @@ class Grid:
         self._state = state
 
         self._resumable_search = [
+            [None for _ in range(Global.MAX_UNITS)],
+            [None for _ in range(Global.MAX_UNITS)],
+        ]
+        self._reservation_tables = [
             [None for _ in range(Global.MAX_UNITS)],
             [None for _ in range(Global.MAX_UNITS)],
         ]
@@ -96,7 +100,17 @@ class Grid:
             grid = copy.copy(grid)
             grid.remove_obstacle(ship.coordinates)
 
-        rs = ResumableDijkstra(grid, ship.coordinates)
+        reservation_table = copy.copy(self.reservation_table)
+        _add_opp_ships(reservation_table, self._state, ship.energy)
+
+        self._reservation_tables[team_id][unit_id] = reservation_table
+
+        rs = ResumableSpaceTimeDijkstra(
+            grid,
+            ship.coordinates,
+            reservation_table,
+            max(self._state.steps_left_in_match(), 40),
+        )
         team_resumable_search[unit_id] = rs
         return rs
 
@@ -105,6 +119,16 @@ class Grid:
         reservation_table = ReservationTable(self.energy)
         add_dynamic_environment(reservation_table, self._state)
         return reservation_table
+
+
+def _add_opp_ships(rt, state, ship_energy):
+    for opp_ship in state.opp_fleet:
+        if opp_ship.energy < ship_energy:
+            continue
+
+        opp_coord = opp_ship.coordinates
+        for p in cardinal_positions(*opp_coord):
+            rt.add_vertex_constraint(time=1, node=p)
 
 
 def add_dynamic_environment(rt, state):

@@ -59,12 +59,9 @@ class Heal(Task):
             return False
 
         ship = self.ship
-        path = find_path_in_dynamic_environment(
-            state,
-            start=ship.coordinates,
-            goal=target.coordinates,
-            ship_energy=ship.energy,
-        )
+        rs = state.grid.resumable_search(ship.unit_id)
+
+        path = rs.find_path(target.coordinates)
         if not path:
             return False
 

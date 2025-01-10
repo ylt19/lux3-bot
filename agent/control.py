@@ -98,12 +98,9 @@ class Control(Task):
         return False
 
     def apply(self, state, ship):
-        path = find_path_in_dynamic_environment(
-            state,
-            start=ship.coordinates,
-            goal=self.target.coordinates,
-            ship_energy=ship.energy,
-        )
+        rs = state.grid.resumable_search(ship.unit_id)
+
+        path = rs.find_path(self.target.coordinates)
         if not path:
             return False
 

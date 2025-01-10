@@ -138,6 +138,19 @@ class State:
 
         return copy_state
 
+    def num_steps_before_obstacle_movement(self):
+        return (
+            Global.OBSTACLE_MOVEMENT_PERIOD
+            - (self.global_step - 1) % Global.OBSTACLE_MOVEMENT_PERIOD
+        )
+
+    def get_num_movements(self, step):
+        # Returns the number of cells the obstacles will move from the current `global_step` to the given `step`
+        d = step - self.global_step - self.num_steps_before_obstacle_movement()
+        if d < 0:
+            return 0
+        return 1 + d // Global.OBSTACLE_MOVEMENT_PERIOD
+
     def create_actions_array(self):
         ships = self.fleet.ships
         actions = np.zeros((len(ships), 3), dtype=int)

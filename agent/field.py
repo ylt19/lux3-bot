@@ -232,6 +232,18 @@ class Field:
         return protection
 
     @cached_property
+    def reward_within_sap_range(self):
+        r = Global.UNIT_SAP_RANGE * 2 + 1
+        field = convolve2d(
+            self.reward,
+            np.ones((r, r), dtype=np.int32),
+            mode="same",
+            boundary="fill",
+            fillvalue=0,
+        )
+        return field
+
+    @cached_property
     def reward_positions(self):
         reward_nodes = self.space.reward_nodes
         if not reward_nodes:

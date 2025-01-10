@@ -59,12 +59,9 @@ class RelicFinder(Task):
         return score
 
     def apply(self, state, ship):
-        path = find_path_in_dynamic_environment(
-            state,
-            start=ship.coordinates,
-            goal=self.target.coordinates,
-            ship_energy=ship.energy,
-        )
+        rs = state.grid.resumable_search(ship.unit_id)
+
+        path = rs.find_path(self.target.coordinates)
         if not path:
             return False
 
@@ -152,12 +149,9 @@ class VoidSeeker(Task):
         if not target_node:
             return False
 
-        path = find_path_in_dynamic_environment(
-            state,
-            start=ship.coordinates,
-            goal=target_node.coordinates,
-            ship_energy=ship.energy,
-        )
+        rs = state.grid.resumable_search(ship.unit_id)
+
+        path = rs.find_path(target_node.coordinates)
 
         if len(path) == 0:
             return False
@@ -201,12 +195,7 @@ class VoidSeeker(Task):
                             target_node, min_distance = node, grid_distance
 
                 # find a new path
-                path = find_path_in_dynamic_environment(
-                    state,
-                    start=ship.coordinates,
-                    goal=target_node.coordinates,
-                    ship_energy=ship.energy,
-                )
+                path = rs.find_path(target_node.coordinates)
 
         self.target = target_node
         ship.action_queue = path_to_actions(path)

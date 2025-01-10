@@ -96,15 +96,18 @@ class Global:
         MSG_TASK_FINISHED = False
 
     class MatchOverChill(DefaultParams):
+        CONTROL_TASK = False
         VOID_SINGER_INIT_SCORE = 1000
         VOID_SINGER_MIDDLE_LANE_DISTANCE_MULTIPLIER = 100
 
     class GameOverChill(DefaultParams):
         RELIC_FINDER_TASK = False
         VOID_SEEKER_TASK = False
-        VOID_SINGER_TASK = False
+        CONTROL_TASK = False
+        HEAL_TASK = False
         HEAL_NEAR_REWARDS = False
         if IS_KAGGLE:
+            HEAL_TASK = True
             MSG_TASK = True
 
     Params = DefaultParams
