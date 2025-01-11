@@ -109,7 +109,7 @@ class Grid:
             grid,
             ship.coordinates,
             reservation_table,
-            max(self._state.steps_left_in_match(), 40),
+            min(self._state.steps_left_in_match(), 40),
         )
         team_resumable_search[unit_id] = rs
         return rs
@@ -127,6 +127,7 @@ def _add_opp_ships(rt, state, ship_energy):
             continue
 
         opp_coord = opp_ship.coordinates
+        rt.add_vertex_constraint(time=1, node=opp_coord)
         for p in cardinal_positions(*opp_coord):
             rt.add_vertex_constraint(time=1, node=p)
 
