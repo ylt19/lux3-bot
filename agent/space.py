@@ -323,15 +323,34 @@ class Space:
                 ship_nodes.add(self.get_node(*position))
 
         if ship_nodes:
-            Global.REWARD_RESULTS.append(
-                {
-                    "nodes": ship_nodes,
-                    "reward": team_reward,
-                    "full_visibility": full_visibility,
-                }
-            )
+            record = {
+                "step": obs["steps"],
+                "nodes": ship_nodes,
+                "reward": team_reward,
+                "full_visibility": full_visibility,
+            }
+
+            if not full_visibility:
+                oov_nodes = []  # out-of-vision nodes that can potentially give points
+                for node in self:
+                    if not node.is_visible and (
+                        not node.explored_for_reward or node.reward
+                    ):
+                        oov_nodes.append(node)
+
+                record["oov_nodes"] = oov_nodes
+
+            Global.REWARD_RESULTS.append(record)
 
     def _update_reward_status_from_reward_results(self):
+
+        for result in Global.REWARD_RESULTS:
+            if "oov_nodes" in result:
+                result["oov_nodes"] = [
+                    node
+                    for node in result["oov_nodes"]
+                    if not node.explored_for_reward or node.reward
+                ]
 
         count = 0
 
@@ -387,17 +406,37 @@ class Space:
                         )
                         continue
                 else:
+                    oov_reward_nodes = [
+                        node
+                        for node in result["oov_nodes"]
+                        if not node.explored_for_reward or node.reward
+                    ]
+
+                    if reward == len(unknown_nodes) + len(oov_reward_nodes):
+                        # all nodes yield points
+                        for node in unknown_nodes:
+                            updated = True
+                            self._update_reward_status(*node.coordinates, status=True)
+
+                        for node in oov_reward_nodes:
+                            updated = True
+                            self._update_reward_status(*node.coordinates, status=True)
+
+                        continue
+
                     if reward >= len(unknown_nodes):
                         # We can't see the entire fleet, we can't tell where these rewards came from
                         continue
 
-                filtered_results.append(
-                    {
-                        "nodes": unknown_nodes,
-                        "reward": reward,
-                        "full_visibility": result["full_visibility"],
-                    }
-                )
+                r = {
+                    "nodes": unknown_nodes,
+                    "reward": reward,
+                    "full_visibility": result["full_visibility"],
+                }
+                if "oov_nodes" in result:
+                    r["oov_nodes"] = result["oov_nodes"]
+
+                filtered_results.append(r)
 
             reward_results = filtered_results
 
