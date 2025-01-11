@@ -52,13 +52,14 @@ class Fleet:
                 if (
                     ship.node is not None
                     and ship.energy >= 0
-                    and space.get_node(*ship.coordinates).is_visible
+                    and not space.get_node(*ship.coordinates).is_visible
                 ):
                     # The ship is out of sight of our sensors
                     ship.steps_since_last_seen += 1
                     ship.task = None
                     ship.action_queue = []
                 else:
+                    # The ship was probably destroyed.
                     ship.clear()
 
             ship.action_queue = []
