@@ -5,7 +5,23 @@ from pathfinding import Grid, ResumableDijkstra
 from scipy.signal import convolve2d
 
 from .path import NodeType
-from .base import log, Global, SPACE_SIZE, Colors, nearby_positions, cardinal_positions
+from .base import (
+    log,
+    Global,
+    SPACE_SIZE,
+    Colors,
+    nearby_positions,
+    cardinal_positions,
+    manhattan_distance,
+)
+
+
+class StaticField:
+    DISTANCE = None
+    OPP_DISTANCE = None
+
+    REWARD_DISTANCE_NUM_REWARD_NODES = 0
+    REWARD_DISTANCE = None
 
 
 class Field:
@@ -79,25 +95,31 @@ class Field:
 
         return field
 
-    @cached_property
+    @property
     def distance(self):
-        field = create_empty_field()
+        if StaticField.DISTANCE is None:
+            field = create_empty_field()
 
-        for x in range(SPACE_SIZE):
-            for y in range(SPACE_SIZE):
-                field[y, x] = self._state.fleet.spawn_distance(x, y)
+            for x in range(SPACE_SIZE):
+                for y in range(SPACE_SIZE):
+                    field[y, x] = self._state.fleet.spawn_distance(x, y)
 
-        return field
+            StaticField.DISTANCE = field
+
+        return StaticField.DISTANCE
 
     @cached_property
     def opp_distance(self):
-        field = create_empty_field()
+        if StaticField.OPP_DISTANCE is None:
+            field = create_empty_field()
 
-        for x in range(SPACE_SIZE):
-            for y in range(SPACE_SIZE):
-                field[y, x] = self._state.opp_fleet.spawn_distance(x, y)
+            for x in range(SPACE_SIZE):
+                for y in range(SPACE_SIZE):
+                    field[y, x] = self._state.opp_fleet.spawn_distance(x, y)
 
-        return field
+            StaticField.OPP_DISTANCE = field
+
+        return StaticField.OPP_DISTANCE
 
     @cached_property
     def rear(self):
@@ -242,6 +264,26 @@ class Field:
             fillvalue=0,
         )
         return field
+
+    @property
+    def reward_distance(self):
+
+        if StaticField.REWARD_DISTANCE is None:
+            field = create_empty_field()
+            field[:] = SPACE_SIZE * 2
+            StaticField.REWARD_DISTANCE = field
+
+        if len(self.space.reward_nodes) != StaticField.REWARD_DISTANCE_NUM_REWARD_NODES:
+            StaticField.REWARD_DISTANCE_NUM_REWARD_NODES = len(self.space.reward_nodes)
+            reward_positions = [x.coordinates for x in self.space.reward_nodes]
+            for x in range(SPACE_SIZE):
+                for y in range(SPACE_SIZE):
+                    min_distance = min(
+                        manhattan_distance(p, (x, y)) for p in reward_positions
+                    )
+                    StaticField.REWARD_DISTANCE[y, x] = min_distance
+
+        return StaticField.REWARD_DISTANCE
 
     @cached_property
     def reward_positions(self):

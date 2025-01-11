@@ -29,6 +29,8 @@ class Control(Task):
             state.field.reward_positions + state.field.control_positions
         )
 
+        reward_distance = state.field.reward_distance
+
         for ship in state.fleet:
             if isinstance(ship.task, Control):
                 p = ship.task.target.coordinates
@@ -38,10 +40,7 @@ class Control(Task):
         tasks = []
         for x, y in control_positions:
 
-            min_reward_distance = min(
-                manhattan_distance(node.coordinates, (x, y))
-                for node in state.space.reward_nodes
-            )
+            min_reward_distance = reward_distance[y, x]
 
             if min_reward_distance > 10:
                 continue
