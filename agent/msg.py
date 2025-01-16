@@ -162,7 +162,7 @@ def continue_to_print(state, msg):
                 ship.coordinates,
                 task.target.coordinates,
                 length=len(task.path) - 2,
-                reservation_table=state.reservation_table,
+                reservation_table=state.grid.reservation_table,
             )
 
             task.path = new_path
@@ -289,7 +289,7 @@ def apply_to_position(state, ships, top_left, msg):
 
     # find path
     steps_left = state.steps_left_in_match() - num_sap_steps
-    reservation_table = state.reservation_table
+    reservation_table = state.grid.reservation_table
     finder = create_finder(state, energy_ground=10)
     for ship, task in ship_to_task.items():
         path = finder.find_path_with_length_limit(
