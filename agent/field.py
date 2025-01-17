@@ -28,9 +28,13 @@ class Field:
     def __init__(self, state):
         self._state = state
 
-        self.asteroid, self.nebulae, self.energy, self.energy_gain = (
-            self._create_space_fields()
-        )
+        (
+            self.asteroid,
+            self.nebulae,
+            self.energy,
+            self.energy_gain,
+            self.unexplored_for_reward,
+        ) = self._create_space_fields()
 
     @property
     def space(self):
@@ -42,6 +46,7 @@ class Field:
         energy_field = create_empty_field()
         energy_field[:] = Global.HIDDEN_NODE_ENERGY
         energy_gain_field = create_empty_field()
+        unexplored_for_reward = create_empty_field()
         for node in self.space:
             x, y = node.coordinates
             if node.type == NodeType.asteroid:
@@ -51,7 +56,15 @@ class Field:
             if node.energy is not None:
                 energy_field[y, x] = node.energy
             energy_gain_field[y, x] = node.energy_gain
-        return asteroid_field, nebulae_field, energy_field, energy_gain_field
+            if not node.explored_for_reward:
+                unexplored_for_reward[y, x] = 1
+        return (
+            asteroid_field,
+            nebulae_field,
+            energy_field,
+            energy_gain_field,
+            unexplored_for_reward,
+        )
 
     @cached_property
     def vision(self):
