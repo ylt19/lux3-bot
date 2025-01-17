@@ -89,6 +89,33 @@ NP_MSG_SMALL = {
     ],
 }
 
+# GG
+GG_MSG = {
+    "size": (11, 6),
+    "num_sap_steps": 2,
+    "min_sap_range": 3,
+    "ship_tasks": [
+        # G G
+        {"position": (4, 0), "sap": [(-3, 0), (-3, 0)]},
+        {"position": (1, 0), "sap": [(-1, 1), (-1, 1)]},
+        {"position": (0, 1), "sap": [(0, 3), (0, 3)]},
+        {"position": (0, 4), "sap": [(1, 1), (1, 1)]},
+        {"position": (1, 5), "sap": [(3, 0), (3, 0)]},
+        {"position": (4, 5), "sap": [(0, -2), (0, -2)]},
+        {"position": (4, 3), "sap": [(-2, 0), None]},
+        {"position": (2, 3), "sap": [None, (2, 0)]},
+        # G G
+        {"position": (10, 0), "sap": [(-3, 0), (-3, 0)]},
+        {"position": (7, 0), "sap": [(-1, 1), (-1, 1)]},
+        {"position": (6, 1), "sap": [(0, 3), (0, 3)]},
+        {"position": (6, 4), "sap": [(1, 1), (1, 1)]},
+        {"position": (7, 5), "sap": [(3, 0), (3, 0)]},
+        {"position": (10, 5), "sap": [(0, -2), (0, -2)]},
+        {"position": (10, 3), "sap": [(-2, 0), None]},
+        {"position": (8, 3), "sap": [None, (2, 0)]},
+    ],
+}
+
 
 class MsgTask(Task):
 
@@ -108,12 +135,16 @@ class MsgTask(Task):
 
 
 def print_msg(state):
-    if Global.UNIT_SAP_RANGE == 3:
-        msg = NP_MSG_SMALL
-    elif Global.UNIT_SAP_RANGE >= 4:
-        msg = NP_MSG
+
+    if Global.NUM_WINS == 0:
+        msg = GG_MSG
     else:
-        return
+        if Global.UNIT_SAP_RANGE == 3:
+            msg = NP_MSG_SMALL
+        elif Global.UNIT_SAP_RANGE >= 4:
+            msg = NP_MSG
+        else:
+            return
 
     p = Global.Params
 
@@ -164,6 +195,19 @@ def continue_to_print(state, msg):
                 length=len(task.path) - 2,
                 reservation_table=state.grid.reservation_table,
             )
+
+            if not new_path:
+                new_path = finder.find_path_with_length_limit(
+                    ship.coordinates,
+                    task.target.coordinates,
+                    max_length=len(task.path) - 2,
+                    reservation_table=state.grid.reservation_table,
+                )
+
+            if not new_path:
+                ship.task = None
+                ship.action_queue = []
+                continue
 
             task.path = new_path
             ship.action_queue = path_to_actions(new_path)
