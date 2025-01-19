@@ -897,11 +897,19 @@ cdef class ResumableSpaceTimeDijkstra:
     def start_node(self, start_node):
         self._obj.set_start_node(to_node_id(self.graph, start_node))
 
-    def distance(self, node):
-        d = self._obj.distance(to_node_id(self.graph, node))
+    def distance(self, node, time=None):
+        if time is None:
+            time = -1
+        else:
+            assert time >= 0
+        d = self._obj.distance(to_node_id(self.graph, node), time)
         return d if d >= 0 else float("inf")
 
-    def find_path(self, node):
+    def find_path(self, node, time=None):
+        if time is None:
+            time = -1
+        else:
+            assert time >= 0
         g = self.graph
-        path = self._obj.find_path(to_node_id(g, node))
+        path = self._obj.find_path(to_node_id(g, node), time)
         return [to_python_node(g, node_id) for node_id in path]

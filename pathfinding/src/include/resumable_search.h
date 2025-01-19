@@ -139,7 +139,9 @@ class ResumableSpaceTimeDijkstra : public ResumableSearch {
     public:
         ResumableSpaceTimeDijkstra(AbsGraph* graph, int start, int terminal_time, const ReservationTable *rt);
         double distance(int node_id);
+        double distance(int node_id, int time);
         Path find_path(int node_id);
+        Path find_path(int node_id, int time);
         void set_start_node(int start);
 
     private:
@@ -151,6 +153,7 @@ class ResumableSpaceTimeDijkstra : public ResumableSearch {
         std::unordered_map<int, Node> nodes_;
 
         void clear();
-        Node* search(int node_id);
+        Node* search(int node_id, int time);
         Path reconstruct_path(Node* node);
+        void print_node(Node& node);
 };

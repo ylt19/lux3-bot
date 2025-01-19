@@ -292,17 +292,32 @@ void ResumableSpaceTimeDijkstra::set_start_node(int start) {
 }
 
 double ResumableSpaceTimeDijkstra::distance(int node_id) {
+    return distance(node_id, -1);
+}
+
+double ResumableSpaceTimeDijkstra::distance(int node_id, int time) {
     Node* node = nullptr;
-    for (int time = 0; time <= terminal_time_; time++) {
-        int st = node_id + time * graph_size_;
-        if (nodes_.count(st)) {
-            node = &nodes_[st];
-            break;
+
+    if (time < 0) {
+        double min_distance = -1;
+        for (int t = 0; t <= terminal_time_; t++) {
+            int st = node_id + t * graph_size_;
+            if (nodes_.count(st) && nodes_[st].closed) {
+                if (min_distance == -1 || nodes_[st].distance < min_distance) {
+                    min_distance = nodes_[st].distance;
+                    node = &nodes_[st];
+                }
+            }
         }
+    }
+    else {
+        int st = node_id + time * graph_size_;
+        if (nodes_.count(st))
+            node = &nodes_[st];
     }
 
     if (!node || !node->closed)
-        node = search(node_id);
+        node = search(node_id, time);
 
     if (node)
         return node->distance;
@@ -320,19 +335,33 @@ Path ResumableSpaceTimeDijkstra::reconstruct_path(Node* node) {
     return path;
 }
 
-
 Path ResumableSpaceTimeDijkstra::find_path(int node_id) {
+    return find_path(node_id, -1);
+}
+
+Path ResumableSpaceTimeDijkstra::find_path(int node_id, int time) {
     Node* node = nullptr;
-    for (int time = 0; time <= terminal_time_; time++) {
-        int st = node_id + time * graph_size_;
-        if (nodes_.count(st)) {
-            node = &nodes_[st];
-            break;
+
+    if (time < 0) {
+        double min_distance = -1;
+        for (int t = 0; t <= terminal_time_; t++) {
+            int st = node_id + t * graph_size_;
+            if (nodes_.count(st) && nodes_[st].closed) {
+                if (min_distance == -1 || nodes_[st].distance < min_distance) {
+                    min_distance = nodes_[st].distance;
+                    node = &nodes_[st];
+                }
+            }
         }
     }
+    else {
+        int st = node_id + time * graph_size_;
+        if (nodes_.count(st) && nodes_[st].closed)
+            node = &nodes_[st];
+    }
 
-    if (!node || !node->closed)
-        node = search(node_id);
+    if (!node)
+        node = search(node_id, time);
 
     if (node)
         return reconstruct_path(node);
@@ -340,27 +369,27 @@ Path ResumableSpaceTimeDijkstra::find_path(int node_id) {
     return {};
 }
 
-ResumableSpaceTimeDijkstra::Node* ResumableSpaceTimeDijkstra::search(int goal) {
-    // cout << "start search to " << graph->node_to_string(goal) << endl;
+ResumableSpaceTimeDijkstra::Node* ResumableSpaceTimeDijkstra::search(int goal, int time) {
+    // cout << "start search to " << graph->node_to_string(goal) << " time=" << time << endl;
 
     auto process_node = [&] (int node_id, double cost, Node* current) {
-        int time = current->time + 1;
-        double distance = current->distance + cost + rt_->get_additional_weight(time, node_id);
+        int next_time = current->time + 1;
+        double distance = current->distance + cost + rt_->get_additional_weight(next_time, node_id);
 
-        int st = node_id + time * graph_size_;
+        int st = node_id + next_time * graph_size_;
         if (!nodes_.count(st)) {
-            // cout << "add node " << graph->node_to_string(node_id);
-            // cout << " time=" << time << " distance=" << distance << endl;
-            nodes_.emplace(st, Node(current, node_id, time, distance));
+            nodes_.emplace(st, Node(current, node_id, next_time, distance));
             openset_.push({distance, &nodes_.at(st)});
+            // cout << " - add node ";
+            // print_node(nodes_[st]);
         }
         else if (nodes_.at(st).distance > distance) {
-            // cout << "update node " << graph->node_to_string(node_id);
-            // cout << " time=" << time << " distance=" << distance << endl;
             Node& n = nodes_.at(st);
             n.distance = distance;
             n.parent = current;
             openset_.push({distance, &n});
+            // cout << " - update node ";
+            // print_node(nodes_[st]);
         }
     };
 
@@ -368,24 +397,24 @@ ResumableSpaceTimeDijkstra::Node* ResumableSpaceTimeDijkstra::search(int goal) {
         auto [distance, current] = openset_.top();
         openset_.pop();
 
-        int time = current->time;
+        int current_time = current->time;
 
-        // cout << " - explore node " << graph->node_to_string(current->node_id);
-        // cout << " time=" << time << " distance=" << distance << endl;
+        // cout << "explore node ";
+        // print_node(*current);
 
         if (current->closed)
             continue;
 
         // expand node
-        if (time < terminal_time_) {
+        if (current_time < terminal_time_) {
             // pause action
-            if (!rt_->is_reserved(time + 1, current->node_id))
+            if (!rt_->is_reserved(current_time + 1, current->node_id))
                 process_node(current->node_id, graph->get_pause_action_cost(current->node_id), current);
 
             // movement actions
-            auto reserved_edges = rt_->get_reserved_edges(time, current->node_id);
+            auto reserved_edges = rt_->get_reserved_edges(current_time, current->node_id);
             for (auto &[node_id, cost] : graph->get_neighbors(current->node_id)) {
-                if (!reserved_edges.count(node_id) && !rt_->is_reserved(time + 1, node_id))
+                if (!reserved_edges.count(node_id) && !rt_->is_reserved(current_time + 1, node_id))
                     process_node(node_id, cost, current);
             }
         }
@@ -393,8 +422,16 @@ ResumableSpaceTimeDijkstra::Node* ResumableSpaceTimeDijkstra::search(int goal) {
         current->closed = true;
 
         if (current->node_id == goal)
-            return current;
-    }
+            if (time < 0 || current_time == time) {
+                return current;
+            }
+        }
 
     return nullptr;
+}
+
+void ResumableSpaceTimeDijkstra::print_node(Node& node) {
+    cout << "Node(" << graph->node_to_string(node.node_id);
+    cout << ", time=" << node.time << ", distance=" << node.distance;
+    cout << ", closed=" << node.closed << ")" << endl;
 }
