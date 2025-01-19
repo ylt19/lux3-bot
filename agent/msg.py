@@ -1,8 +1,6 @@
-import numpy as np
 from .base import log, SPACE_SIZE, Task, Global, manhattan_distance, get_spawn_location
 from .path import path_to_actions, Action, ActionType
 
-from pathfinding import Grid, SpaceTimeAStar
 
 # Happy New Year
 HNY_MSG = {
@@ -174,7 +172,6 @@ def continue_to_print(state, msg):
         return
 
     num_msg_ships = 0
-    finder = create_finder(state, energy_ground=Global.UNIT_MOVE_COST)
     for ship in state.fleet:
         task = ship.task
 
@@ -189,20 +186,10 @@ def continue_to_print(state, msg):
                 ship.task = None
                 continue
 
-            new_path = finder.find_path_with_exact_length(
-                ship.coordinates,
-                task.target.coordinates,
-                length=len(task.path) - 2,
-                reservation_table=state.grid.reservation_table,
+            rs = state.grid.resumable_search(ship.unit_id)
+            new_path = rs.find_path(
+                node=task.target.coordinates, time=len(task.path) - 2
             )
-
-            if not new_path:
-                new_path = finder.find_path_with_length_limit(
-                    ship.coordinates,
-                    task.target.coordinates,
-                    max_length=len(task.path) - 2,
-                    reservation_table=state.grid.reservation_table,
-                )
 
             if not new_path:
                 ship.task = None
@@ -318,7 +305,9 @@ def apply_to_position(state, ships, top_left, msg):
             ):
                 continue
 
-            distance = manhattan_distance(ship.coordinates, goal)
+            rs = state.grid.resumable_search(ship.unit_id)
+            path = rs.find_path(goal)
+            distance = len(path)
             if (
                 state.match_step + distance + num_sap_steps
                 < Global.MAX_STEPS_IN_MATCH - 1
@@ -329,52 +318,18 @@ def apply_to_position(state, ships, top_left, msg):
         if not best_ship:
             return
 
-        ship_to_task[best_ship] = {"sap": task["sap"], "goal": goal, "path": []}
+        rs = state.grid.resumable_search(best_ship.unit_id)
+        path = rs.find_path(goal)
+        ship_to_task[best_ship] = {"sap": task["sap"], "goal": goal, "path": path}
 
-    # find path
-    steps_left = state.steps_left_in_match() - num_sap_steps
-    reservation_table = state.grid.reservation_table
-    finder = create_finder(state, energy_ground=10)
-    for ship, task in ship_to_task.items():
-        path = finder.find_path_with_length_limit(
-            ship.coordinates,
-            task["goal"],
-            max_length=steps_left,
-            reservation_table=reservation_table,
-        )
-        if not path:
-            return
-        ship_to_task[ship]["path"] = path
-
-    # find the best path
-    finder = create_finder(state, energy_ground=Global.UNIT_MOVE_COST)
+    # find the path with exact length
+    # thus, all ships will reach the targets in the same time
     max_length = max(len(x["path"]) for x in ship_to_task.values())
     for ship, task in ship_to_task.items():
-        path = finder.find_path_with_exact_length(
-            ship.coordinates,
-            task["goal"],
-            length=max_length,
-            reservation_table=reservation_table,
-        )
+        rs = state.grid.resumable_search(ship.unit_id)
+        path = rs.find_path(task["goal"], time=max_length)
         if not path:
             return
         ship_to_task[ship]["path"] = path
 
     return ship_to_task
-
-
-def create_finder(state, energy_ground):
-
-    def energy_to_weight(energy):
-        if energy < energy_ground:
-            return energy_ground - energy + 1
-        return Global.Params.ENERGY_TO_WEIGHT_BASE ** (energy_ground - energy)
-
-    weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
-    for node in state.space:
-        weights[node.y][node.x] = energy_to_weight(node.energy_gain)
-
-    grid = Grid(weights, pause_action_cost="node.weight")
-
-    finder = SpaceTimeAStar(grid)
-    return finder
