@@ -95,11 +95,7 @@ class Grid:
         if ship.node is None:
             return
 
-        grid = self.energy_gain_with_asteroids
-        if grid.has_obstacle(ship.coordinates):
-            grid = copy.copy(grid)
-            grid.remove_obstacle(ship.coordinates)
-
+        grid = self.energy
         reservation_table = copy.copy(self.reservation_table)
         _add_opp_ships(reservation_table, self._state, ship.energy)
 
