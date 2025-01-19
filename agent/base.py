@@ -1,5 +1,6 @@
 import os
 import sys
+import numpy as np
 
 IS_KAGGLE = os.path.exists("/kaggle_simulations")
 
@@ -113,6 +114,37 @@ class Global:
     Params = DefaultParams
     HIDDEN_NODE_ENERGY = Params.HIDDEN_NODE_ENERGY
 
+    @classmethod
+    def clear(cls):
+
+        cls.UNIT_MOVE_COST = 1
+        cls.UNIT_SAP_COST = 30
+        cls.UNIT_SAP_RANGE = 3
+        cls.UNIT_SENSOR_RANGE = 2
+        cls.NEBULA_ENERGY_REDUCTION = 10
+        cls.OBSTACLE_MOVEMENT_PERIOD = 20
+        cls.OBSTACLE_MOVEMENT_DIRECTION = (0, 0)
+        cls.UNIT_SAP_DROPOFF_FACTOR = 0.5
+        cls.UNIT_ENERGY_VOID_FACTOR = 0.125
+
+        cls.ALL_RELICS_FOUND = False
+        cls.ALL_REWARDS_FOUND = False
+        cls.NEBULA_ENERGY_REDUCTION_FOUND = False
+        cls.OBSTACLE_MOVEMENT_PERIOD_FOUND = False
+        cls.OBSTACLE_MOVEMENT_DIRECTION_FOUND = False
+        cls.UNIT_SAP_DROPOFF_FACTOR_FOUND = False
+        cls.UNIT_ENERGY_VOID_FACTOR_FOUND = False
+
+        cls.NUM_COMPLETED_MATCHES = 0
+        cls.NUM_WINS = 0
+        cls.POINTS = []
+        cls.OPP_POINTS = []
+
+        cls.REWARD_RESULTS = []
+        cls.OBSTACLES_MOVEMENT_STATUS = []
+
+        cls.Params = cls.DefaultParams
+
 
 class Colors:
     red = "\033[91m"
@@ -206,6 +238,23 @@ def set_game_prams(new_params):
 
     log(f"Update Params {Global.Params.__name__}->{new_params.__name__}", level=2)
     Global.Params = new_params
+
+
+def flip_side(a):
+    # returns an array mirrored through the diagonal
+    if len(a.shape) == 3:
+        return np.array([np.fliplr(np.flipud(x)).T for x in a])
+    elif len(a.shape) == 2:
+        return np.fliplr(np.flipud(a)).T
+    else:
+        raise ValueError(f"cant convert array with shape {a.shape}")
+
+
+def get_nebula_tile_drift_speed():
+    speed = 1 / Global.OBSTACLE_MOVEMENT_PERIOD
+    if Global.OBSTACLE_MOVEMENT_DIRECTION[0] < 0:
+        speed *= -1
+    return speed
 
 
 class Task:
