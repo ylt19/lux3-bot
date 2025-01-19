@@ -170,6 +170,23 @@ class Field:
         return field
 
     @cached_property
+    def opp_ships_potential_positions(self):
+        out_of_control = np.logical_not(self.control)
+
+        # is it possible for opponent's ships to reach this position
+        field = np.logical_and(
+            out_of_control, self.opp_distance <= self._state.match_step
+        )
+
+        # add opponent's ships with energy
+        for ship in self._state.opp_fleet:
+            if ship.energy >= 0:
+                x, y = ship.coordinates
+                field[y, x] = 1
+
+        return field
+
+    @cached_property
     def opp_sap_ships_potential_positions(self):
         out_of_control = np.logical_not(self.control)
 
@@ -184,6 +201,21 @@ class Field:
                 x, y = ship.coordinates
                 field[y, x] = 1
 
+        return field
+
+    @cached_property
+    def sap_mask(self):
+        # returns positions that make sense to sap
+        sap_kernel = np.ones((5, 5), dtype=np.float32)
+
+        field = convolve2d(
+            self.opp_ships_potential_positions,
+            sap_kernel,
+            mode="same",
+            boundary="fill",
+            fillvalue=0,
+        )
+        field = field > 0
         return field
 
     @cached_property
