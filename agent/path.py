@@ -61,17 +61,29 @@ class ActionType(IntEnum):
     def to_direction(self):
         return DIRECTIONS[self]
 
-    def flip_side(self):
-        if self == ActionType.up:
-            return ActionType.right
-        elif self == ActionType.right:
-            return ActionType.up
-        elif self == ActionType.left:
-            return ActionType.down
-        elif self == ActionType.down:
-            return ActionType.left
+    def transpose(self, reflective=False):
+        if reflective:
+            if self == ActionType.up:
+                return ActionType.right
+            elif self == ActionType.right:
+                return ActionType.up
+            elif self == ActionType.left:
+                return ActionType.down
+            elif self == ActionType.down:
+                return ActionType.left
+            else:
+                return self
         else:
-            return self
+            if self == ActionType.up:
+                return ActionType.left
+            elif self == ActionType.left:
+                return ActionType.up
+            elif self == ActionType.right:
+                return ActionType.down
+            elif self == ActionType.down:
+                return ActionType.right
+            else:
+                return self
 
 
 def apply_action(x: int, y: int, action: ActionType) -> tuple[int, int]:

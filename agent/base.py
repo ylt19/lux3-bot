@@ -240,14 +240,21 @@ def set_game_prams(new_params):
     Global.Params = new_params
 
 
-def flip_side(a):
-    # returns an array mirrored through the diagonal
-    if len(a.shape) == 3:
-        return np.array([np.fliplr(np.flipud(x)).T for x in a])
-    elif len(a.shape) == 2:
-        return np.fliplr(np.flipud(a)).T
+def transpose(arr, reflective=False):
+    if len(arr.shape) == 2:
+        if not reflective:
+            return arr.T
+        else:
+            return arr[::-1, ::-1].T
+
+    elif len(arr.shape) == 3:
+        if not reflective:
+            return np.transpose(arr, axes=[0, 2, 1])
+        else:
+            return np.transpose(arr[:, ::-1, ::-1], axes=[0, 2, 1])
+
     else:
-        raise ValueError(f"cant convert array with shape {a.shape}")
+        raise ValueError(f"Can't transpose array with the shape {arr.shape}")
 
 
 def get_nebula_tile_drift_speed():
