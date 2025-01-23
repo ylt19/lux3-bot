@@ -247,6 +247,13 @@ class State:
         # 1 - if our agent wins
         # -1 - if the opponent wins
         # 0 - unknown
+
+        num_relics_th = (
+            2 * min(self.match_number, Global.LAST_MATCH_WHEN_RELIC_CAN_APPEAR) + 1
+        )
+        if len(self.space.relic_nodes) < num_relics_th:
+            return 0
+
         if not Global.ALL_REWARDS_FOUND:
             return 0
 
