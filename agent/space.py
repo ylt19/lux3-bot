@@ -12,6 +12,7 @@ from .base import (
     nearby_positions,
     get_match_number,
     get_match_step,
+    elements_moving,
     obstacles_moving,
 )
 
@@ -177,24 +178,17 @@ class Space:
         for node in self:
             x, y = node.coordinates
             is_visible = sensor_mask[x, y]
+            if not is_visible:
+                continue
 
-            if (
-                is_visible
-                and not node.is_unknown
-                and node.type.value != obs_tile_type[x, y]
-            ):
+            if not node.is_unknown and node.type.value != obs_tile_type[x, y]:
                 obstacles_shifted = True
 
-            if (
-                is_visible
-                and node.energy is not None
-                and node.energy != obs_energy[x, y]
-            ):
+            if node.energy is not None and node.energy != obs_energy[x, y]:
                 energy_nodes_shifted = True
 
-        # log(
-        #     f"obstacles_shifted = {obstacles_shifted}, energy_nodes_shifted = {energy_nodes_shifted}"
-        # )
+        if not Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
+            self.add_obs_to_obstacles_movement_status_log(obs, obstacles_shifted)
 
         def clear_map_info():
             for n in self:
@@ -217,8 +211,6 @@ class Space:
                 clear_map_info()
 
         if not Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
-            Global.OBSTACLES_MOVEMENT_STATUS.append(obstacles_shifted)
-
             period = _get_obstacle_movement_period(Global.OBSTACLES_MOVEMENT_STATUS)
             if period is not None:
                 Global.OBSTACLE_MOVEMENT_PERIOD_FOUND = True
@@ -316,6 +308,47 @@ class Space:
                     obs, opp_team_id, opp_team_reward, full_visibility=False
                 )
                 self._update_reward_status_from_reward_results()
+
+    def add_obs_to_obstacles_movement_status_log(self, obs, obstacles_shifted):
+        if obstacles_shifted:
+            Global.OBSTACLES_MOVEMENT_STATUS.append(True)
+            return
+
+        con_detect_obstacles_movements = False
+
+        sensor_mask = obs["sensor_mask"]
+        obstacles = [NodeType.nebula, NodeType.asteroid]
+
+        for node in self:
+            x, y = node.coordinates
+            if (
+                not sensor_mask[x, y]
+                or not node.is_visible
+                or node.type not in obstacles
+            ):
+                continue
+
+            for dx, dy in [(1, -1), (-1, 1)]:
+                x_, y_ = warp_point(x + dx, y + dy)
+                next_node = self.get_node(x_, y_)
+                if (
+                    not sensor_mask[x_, y_]
+                    or not next_node.is_visible
+                    or next_node.type == node.type
+                ):
+                    continue
+
+                con_detect_obstacles_movements = True
+                # log(f"can detect obstacles movements with nodes {node} {next_node}")
+                break
+
+            if con_detect_obstacles_movements:
+                break
+
+        if con_detect_obstacles_movements:
+            Global.OBSTACLES_MOVEMENT_STATUS.append(False)
+        else:
+            Global.OBSTACLES_MOVEMENT_STATUS.append(None)
 
     def move_obstacles(self, global_step):
         if (
@@ -628,19 +661,42 @@ def _get_obstacle_movement_direction(space, obs):
 
 
 def _get_obstacle_movement_period(obstacles_movement_status):
-    if len(obstacles_movement_status) < 81:
-        return
 
-    num_movements = sum(obstacles_movement_status)
+    suitable_periods = []
+    for period in (20 / 3, 10, 20, 40):
 
-    log("num_movements", num_movements)
-    log(obstacles_movement_status)
+        moving_pattern = [
+            elements_moving(x + 1, period)
+            for x in range(len(obstacles_movement_status))
+        ]
+        moving_pattern[0] = False
 
-    if num_movements <= 2:
-        return 40
-    elif num_movements <= 4:
-        return 20
-    elif num_movements <= 8:
-        return 10
-    else:
-        return 20 / 3  # 6.66
+        is_suitable = True
+        for pattern_flag, obs_flag in zip(moving_pattern, obstacles_movement_status):
+            if pattern_flag is True and obs_flag is False:
+                is_suitable = False
+                break
+
+        obs_num_movements = sum(x is True for x in obstacles_movement_status)
+        pattern_num_movements = sum(moving_pattern)
+
+        if obs_num_movements > pattern_num_movements:
+            is_suitable = False
+
+        if is_suitable:
+            suitable_periods.append(period)
+
+    log(
+        f"There are {len(suitable_periods)} obstacle movement periods ({suitable_periods}), "
+        f"that fit the observation: {obstacles_movement_status}"
+    )
+
+    if not suitable_periods:
+        log(
+            f"Can't find an obstacle movement period, "
+            f"which would fits to the observation {obstacles_movement_status}",
+            level=1,
+        )
+
+    if len(suitable_periods) == 1:
+        return suitable_periods[0]

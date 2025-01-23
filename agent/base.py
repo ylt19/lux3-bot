@@ -59,6 +59,7 @@ class Global:
     # A history log of obstacle (asteroids and nebulae) movement events.
     # - `True`: The ships' sensors detected a change in the obstacles' positions at this step.
     # - `False`: The sensors did not detect any changes.
+    # - `None`: It is unknown whether there have been changes or not.
     # This information will be used to determine the speed and direction of obstacle movement.
     OBSTACLES_MOVEMENT_STATUS = []
 
