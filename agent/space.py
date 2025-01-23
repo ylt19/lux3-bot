@@ -12,6 +12,7 @@ from .base import (
     nearby_positions,
     get_match_number,
     get_match_step,
+    obstacles_moving,
 )
 
 
@@ -320,9 +321,9 @@ class Space:
         if (
             Global.OBSTACLE_MOVEMENT_PERIOD_FOUND
             and Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND
-            and Global.OBSTACLE_MOVEMENT_PERIOD > 0
-            and (global_step - 1) % Global.OBSTACLE_MOVEMENT_PERIOD == 0
+            and obstacles_moving(global_step)
         ):
+            log(f"move obstacles, direction {Global.OBSTACLE_MOVEMENT_DIRECTION}")
             self.move(*Global.OBSTACLE_MOVEMENT_DIRECTION, inplace=True)
 
     def _update_reward_status_from_relics_distribution(self):
@@ -642,4 +643,4 @@ def _get_obstacle_movement_period(obstacles_movement_status):
     elif num_movements <= 8:
         return 10
     else:
-        return 7
+        return 20 / 3  # 6.66

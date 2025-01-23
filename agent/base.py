@@ -24,7 +24,7 @@ class Global:
     UNIT_SAP_RANGE = 3  # OPTIONS: list(range(3, 8))
     UNIT_SENSOR_RANGE = 2  # OPTIONS: [1, 2, 3, 4]
     NEBULA_ENERGY_REDUCTION = 5  # OPTIONS: [0, 1, 2, 3, 5, 25]
-    OBSTACLE_MOVEMENT_PERIOD = 20  # OPTIONS: 7(?), 10, 20, 40
+    OBSTACLE_MOVEMENT_PERIOD = 20  # OPTIONS: 6.66, 10, 20, 40
     OBSTACLE_MOVEMENT_DIRECTION = (0, 0)  # OPTIONS: [(1, -1), (-1, 1)]
     UNIT_SAP_DROPOFF_FACTOR = 0.5  # OPTIONS: [0.25, 0.5, 1]
     UNIT_ENERGY_VOID_FACTOR = 0.125  # OPTIONS: [0.0625, 0.125, 0.25, 0.375]
@@ -275,6 +275,17 @@ def get_nebula_tile_drift_speed():
     if Global.OBSTACLE_MOVEMENT_DIRECTION[0] < 0:
         speed *= -1
     return speed
+
+
+def elements_moving(step, movement_period=None):
+    speed = 1 / movement_period
+    return (step - 2) * speed % 1 > (step - 1) * speed % 1
+
+
+def obstacles_moving(step):
+    if not Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
+        return
+    return elements_moving(step, movement_period=Global.OBSTACLE_MOVEMENT_PERIOD)
 
 
 class Task:
