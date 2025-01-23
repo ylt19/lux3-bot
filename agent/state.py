@@ -55,6 +55,7 @@ class State:
             self.fleet.clear()
             self.opp_fleet.clear()
             self.space.clear()
+            self.space.clear_exploration_info()
             self.space.move_obstacles(self.global_step)
             self._update_game_params()
             return
@@ -76,13 +77,13 @@ class State:
         self.fleet.update(obs, self.space)
         self.opp_fleet.update(obs, self.space)
 
-        if (
-            Global.OBSTACLE_MOVEMENT_PERIOD == 0
-            or (self.global_step - 1) % Global.OBSTACLE_MOVEMENT_PERIOD != 0
-        ):
-            self.space.update_nodes_by_expected_sensor_mask(
-                self.fleet.expected_sensor_mask()
-            )
+        # if (
+        #     Global.OBSTACLE_MOVEMENT_PERIOD == 0
+        #     or (self.global_step - 1) % Global.OBSTACLE_MOVEMENT_PERIOD != 0
+        # ):
+        #     self.space.update_nodes_by_expected_sensor_mask(
+        #         self.fleet.expected_sensor_mask()
+        #     )
 
         self._update_game_params()
 

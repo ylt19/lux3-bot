@@ -23,12 +23,14 @@ class Global:
     UNIT_MOVE_COST = 1  # OPTIONS: list(range(1, 6))
     UNIT_SAP_COST = 30  # OPTIONS: list(range(30, 51))
     UNIT_SAP_RANGE = 3  # OPTIONS: list(range(3, 8))
-    UNIT_SENSOR_RANGE = 2  # OPTIONS: list(range(2, 5))
-    NEBULA_ENERGY_REDUCTION = 10  # OPTIONS: [0, 10, 25]
-    OBSTACLE_MOVEMENT_PERIOD = 20  # OPTIONS: 20, 40
+    UNIT_SENSOR_RANGE = 2  # OPTIONS: [1, 2, 3, 4]
+    NEBULA_ENERGY_REDUCTION = 5  # OPTIONS: [0, 1, 2, 3, 5, 25]
+    OBSTACLE_MOVEMENT_PERIOD = 20  # OPTIONS: 7(?), 10, 20, 40
     OBSTACLE_MOVEMENT_DIRECTION = (0, 0)  # OPTIONS: [(1, -1), (-1, 1)]
     UNIT_SAP_DROPOFF_FACTOR = 0.5  # OPTIONS: [0.25, 0.5, 1]
     UNIT_ENERGY_VOID_FACTOR = 0.125  # OPTIONS: [0.0625, 0.125, 0.25, 0.375]
+    LAST_MATCH_STEP_WHEN_RELIC_CAN_APPEAR = 50
+    LAST_MATCH_WHEN_RELIC_CAN_APPEAR = 2
 
     # Exploration flags
     ALL_RELICS_FOUND = False
@@ -168,6 +170,14 @@ def log(*args, level=3):
             print(f"{Colors.red}Error{Colors.endc}:", *args, file=file)
         else:
             print(*args, file=file)
+
+
+def get_match_step(step: int) -> int:
+    return step % (Global.MAX_STEPS_IN_MATCH + 1)
+
+
+def get_match_number(step: int) -> int:
+    return step // (Global.MAX_STEPS_IN_MATCH + 1)
 
 
 def is_upper_sector(x, y) -> bool:

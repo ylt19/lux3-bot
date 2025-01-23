@@ -3,7 +3,16 @@ from copy import deepcopy
 from enum import IntEnum
 from scipy.signal import convolve2d
 
-from .base import log, Global, SPACE_SIZE, get_opposite, warp_point
+from .base import (
+    log,
+    Global,
+    SPACE_SIZE,
+    get_opposite,
+    warp_point,
+    nearby_positions,
+    get_match_number,
+    get_match_step,
+)
 
 
 class NodeType(IntEnum):
@@ -30,7 +39,7 @@ class Node:
         self._relic = False
         self._reward = False
         self._explored_for_relic = False
-        self._explored_for_reward = False
+        self._explored_for_reward = True
 
     def __repr__(self):
         return f"Node({self.x}, {self.y}, {self.type})"
@@ -57,22 +66,30 @@ class Node:
     def explored_for_reward(self):
         return self._explored_for_reward
 
-    def update_relic_status(self, status: bool):
-        if self._explored_for_relic and self._relic != status:
+    def update_relic_status(self, status: None | bool):
+        if self._explored_for_relic and self._relic and not status:
             raise ValueError(
                 f"Can't change the relic status {self._relic}->{status} for {self}"
                 ", the tile has already been explored"
             )
 
+        if status is None:
+            self._explored_for_relic = False
+            return
+
         self._relic = status
         self._explored_for_relic = True
 
-    def update_reward_status(self, status: bool):
-        if self._explored_for_reward and self._reward != status:
+    def update_reward_status(self, status: None | bool):
+        if self._explored_for_reward and self._reward and not status:
             raise ValueError(
                 f"Can't change the reward status {self._reward}->{status} for {self}"
                 ", the tile has already been explored"
             )
+
+        if status is None:
+            self._explored_for_reward = False
+            return
 
         self._reward = status
         self._explored_for_reward = True
@@ -145,7 +162,9 @@ class Space:
     ):
         self.move_obstacles(global_step)
         self._update_map(obs)
-        self._update_relic_map(obs, team_id, team_reward, opp_team_id, opp_team_reward)
+        self._update_relic_map(
+            global_step, obs, team_id, team_reward, opp_team_id, opp_team_reward
+        )
 
     def _update_map(self, obs):
         sensor_mask = obs["sensor_mask"]
@@ -176,17 +195,9 @@ class Space:
         #     f"obstacles_shifted = {obstacles_shifted}, energy_nodes_shifted = {energy_nodes_shifted}"
         # )
 
-        if not Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
-            Global.OBSTACLES_MOVEMENT_STATUS.append(obstacles_shifted)
-
-            period = _get_obstacle_movement_period(Global.OBSTACLES_MOVEMENT_STATUS)
-            if period is not None:
-                Global.OBSTACLE_MOVEMENT_PERIOD_FOUND = True
-                Global.OBSTACLE_MOVEMENT_PERIOD = period
-                log(
-                    f"Find param OBSTACLE_MOVEMENT_PERIOD = {period}",
-                    level=2,
-                )
+        def clear_map_info():
+            for n in self:
+                n.type = NodeType.unknown
 
         if not Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND and obstacles_shifted:
             direction = _get_obstacle_movement_direction(self, obs)
@@ -202,15 +213,30 @@ class Space:
                 obstacles_shifted = False
             else:
                 log("Can't find OBSTACLE_MOVEMENT_DIRECTION", level=1)
-                for node in self:
-                    node.type = NodeType.unknown
+                clear_map_info()
+
+        if not Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
+            Global.OBSTACLES_MOVEMENT_STATUS.append(obstacles_shifted)
+
+            period = _get_obstacle_movement_period(Global.OBSTACLES_MOVEMENT_STATUS)
+            if period is not None:
+                Global.OBSTACLE_MOVEMENT_PERIOD_FOUND = True
+                Global.OBSTACLE_MOVEMENT_PERIOD = period
+                log(
+                    f"Find param OBSTACLE_MOVEMENT_PERIOD = {period}",
+                    level=2,
+                )
+
+            if obstacles_shifted:
+                clear_map_info()
 
         if (
             obstacles_shifted
             and Global.OBSTACLE_MOVEMENT_PERIOD_FOUND
             and Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND
         ):
-            raise ValueError("OBSTACLE_MOVEMENTS params are incorrect")
+            log("OBSTACLE_MOVEMENTS params are incorrect", level=2)
+            clear_map_info()
 
         for node in self:
             x, y = node.coordinates
@@ -237,14 +263,17 @@ class Space:
                 node.energy = None
 
     def _update_relic_map(
-        self, obs, team_id, team_reward, opp_team_id, opp_team_reward
+        self, global_step, obs, team_id, team_reward, opp_team_id, opp_team_reward
     ):
         for relic_id, (mask, xy) in enumerate(
             zip(obs["relic_nodes_mask"], obs["relic_nodes"])
         ):
-            if mask:
+            if mask and not self.get_node(*xy).relic:
+                # We have found a new relic.
                 self._update_relic_status(*xy, status=True)
-                self._relic_id_to_node[relic_id] = self.get_node(*xy)
+                for x, y in nearby_positions(*xy, Global.RELIC_REWARD_RANGE):
+                    if not self.get_node(x, y).reward:
+                        self._update_reward_status(x, y, status=None)
 
         all_relics_found = True
         all_rewards_found = True
@@ -261,8 +290,12 @@ class Space:
         Global.ALL_RELICS_FOUND = all_relics_found
         Global.ALL_REWARDS_FOUND = all_rewards_found
 
+        match = get_match_number(global_step)
+        match_step = get_match_step(global_step)
+        num_relics_th = 2 * min(match, Global.LAST_MATCH_WHEN_RELIC_CAN_APPEAR) + 1
+
         if not Global.ALL_RELICS_FOUND:
-            if self.num_relics_found == len(obs["relic_nodes_mask"]):
+            if len(self._relic_nodes) >= num_relics_th:
                 # all relics found, mark all nodes as explored for relics
                 Global.ALL_RELICS_FOUND = True
                 for node in self:
@@ -270,12 +303,18 @@ class Space:
                         self._update_relic_status(*node.coordinates, status=False)
 
         if not Global.ALL_REWARDS_FOUND:
-            self._update_reward_status_from_relics_distribution()
-            self._update_reward_results(obs, team_id, team_reward, full_visibility=True)
-            self._update_reward_results(
-                obs, opp_team_id, opp_team_reward, full_visibility=False
-            )
-            self._update_reward_status_from_reward_results()
+            if (
+                match_step > Global.LAST_MATCH_STEP_WHEN_RELIC_CAN_APPEAR
+                or len(self._relic_nodes) >= num_relics_th
+            ):
+                self._update_reward_status_from_relics_distribution()
+                self._update_reward_results(
+                    obs, team_id, team_reward, full_visibility=True
+                )
+                self._update_reward_results(
+                    obs, opp_team_id, opp_team_reward, full_visibility=False
+                )
+                self._update_reward_status_from_reward_results()
 
     def move_obstacles(self, global_step):
         if (
@@ -552,6 +591,14 @@ class Space:
 
         return a
 
+    def clear_exploration_info(self):
+        Global.REWARD_RESULTS = []
+        Global.ALL_RELICS_FOUND = False
+        Global.ALL_REWARDS_FOUND = False
+        for node in self:
+            if not node.relic:
+                self._update_relic_status(node.x, node.y, status=None)
+
 
 def _get_obstacle_movement_direction(space, obs):
     sensor_mask = obs["sensor_mask"]
@@ -580,11 +627,19 @@ def _get_obstacle_movement_direction(space, obs):
 
 
 def _get_obstacle_movement_period(obstacles_movement_status):
-    if not obstacles_movement_status:
+    if len(obstacles_movement_status) < 81:
         return
 
-    if obstacles_movement_status[-1] is True:
-        if len(obstacles_movement_status) - 21 % 40 < 20:
-            return 20
-        else:
-            return 40
+    num_movements = sum(obstacles_movement_status)
+
+    log("num_movements", num_movements)
+    log(obstacles_movement_status)
+
+    if num_movements <= 2:
+        return 40
+    elif num_movements <= 4:
+        return 20
+    elif num_movements <= 8:
+        return 10
+    else:
+        return 7
