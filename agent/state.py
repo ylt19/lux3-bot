@@ -92,7 +92,7 @@ class State:
 
     def _update_game_params(self):
 
-        if Global.POISON and self.is_game_over():
+        if self.is_game_over():
             set_game_prams(Global.GameOverChill)
             return
 
@@ -100,7 +100,7 @@ class State:
             set_game_prams(Global.DefaultParams)
             return
 
-        if Global.POISON and self.is_match_over():
+        if self.is_match_over():
             set_game_prams(Global.MatchOverChill)
 
     def _update_step_counters(self):

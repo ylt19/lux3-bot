@@ -1,14 +1,26 @@
+import torch
+
 from .base import Global, log
 from .state import State
-
 from .fleet import find_hidden_constants
-from .tasks import apply_tasks
+from .tasks import find_moves
 
 
 class Agent:
-    def __init__(self, player: str, env_cfg) -> None:
+    def __init__(self, player: str, env_cfg, weights_dir: str) -> None:
+
         self.team_id = 0 if player == "player_0" else 1
         self.opp_team_id = 1 - self.team_id
+
+        log(f"init player {self.team_id}")
+        log(f"weights_dir = {weights_dir}")
+        log(f"env_cfg = {env_cfg}")
+
+        self.unit_model = torch.jit.load(f"{weights_dir}/unit_unet.pth")
+        self.unit_model.eval()
+
+        self.sap_model = torch.jit.load(f"{weights_dir}/sap_unet.pth")
+        self.sap_model.eval()
 
         Global.MAX_UNITS = env_cfg["max_units"]
         Global.UNIT_MOVE_COST = env_cfg["unit_move_cost"]
@@ -43,7 +55,8 @@ class Agent:
         # state.show_explored_energy_field()
         # state.show_exploration_map()
 
-        apply_tasks(state)
+        find_moves(self)
+
         # state.show_tasks(show_path=False)
 
         self.previous_state = state.copy()

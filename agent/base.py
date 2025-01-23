@@ -7,7 +7,6 @@ IS_KAGGLE = os.path.exists("/kaggle_simulations")
 
 class Global:
     VERBOSITY = 1
-    POISON = True
     if IS_KAGGLE:
         VERBOSITY = -1
 
@@ -65,6 +64,8 @@ class Global:
 
     # Game Params:
     class DefaultParams:
+        IL = True
+
         HIDDEN_NODE_ENERGY = 0
         ENERGY_TO_WEIGHT_BASE = 1.2
         ENERGY_TO_WEIGHT_GROUND = 12
@@ -99,11 +100,13 @@ class Global:
         MSG_TASK_FINISHED = False
 
     class MatchOverChill(DefaultParams):
+        IL = False
         CONTROL_TASK = False
         VOID_SINGER_INIT_SCORE = 1000
         VOID_SINGER_MIDDLE_LANE_DISTANCE_MULTIPLIER = 100
 
     class GameOverChill(DefaultParams):
+        IL = False
         RELIC_FINDER_TASK = False
         VOID_SEEKER_TASK = False
         CONTROL_TASK = False

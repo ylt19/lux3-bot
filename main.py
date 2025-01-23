@@ -1,8 +1,10 @@
 import json
+from pathlib import Path
 from argparse import Namespace
 
 from agent import Agent
 from agent.kit import from_json
+from agent.base import IS_KAGGLE
 
 ### DO NOT REMOVE THE FOLLOWING CODE ###
 agent_dict = dict()
@@ -14,6 +16,14 @@ def agent_fn(observation, configurations):
     agent definition for kaggle submission.
     """
     global agent_dict
+
+    if IS_KAGGLE:
+        working_folder = "/kaggle_simulations/agent/"
+    else:
+        working_folder = Path(__file__).parent
+
+    weights_dir = f"{working_folder}/imitation_learning/weights/"
+
     obs = observation.obs
     if type(obs) == str:
         obs = json.loads(obs)
@@ -21,7 +31,7 @@ def agent_fn(observation, configurations):
     player = observation.player
     remainingOverageTime = observation.remainingOverageTime
     if step == 0:
-        agent_dict[player] = Agent(player, configurations["env_cfg"])
+        agent_dict[player] = Agent(player, configurations["env_cfg"], weights_dir)
     agent = agent_dict[player]
     actions = agent.act(step, from_json(obs), remainingOverageTime)
     return dict(action=actions.tolist())
