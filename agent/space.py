@@ -663,7 +663,7 @@ def _get_obstacle_movement_direction(space, obs):
 def _get_obstacle_movement_period(obstacles_movement_status):
 
     suitable_periods = []
-    for period in (20 / 3, 10, 20, 40):
+    for period in Global.OBSTACLE_MOVEMENT_PERIOD_OPTIONS:
 
         moving_pattern = [
             elements_moving(x + 1, period)
@@ -672,13 +672,17 @@ def _get_obstacle_movement_period(obstacles_movement_status):
         moving_pattern[0] = False
 
         is_suitable = True
+        obs_num_movements = 0
+        pattern_num_movements = 0
         for pattern_flag, obs_flag in zip(moving_pattern, obstacles_movement_status):
             if pattern_flag is True and obs_flag is False:
                 is_suitable = False
                 break
 
-        obs_num_movements = sum(x is True for x in obstacles_movement_status)
-        pattern_num_movements = sum(moving_pattern)
+            if obs_flag:
+                obs_num_movements += 1
+            if pattern_flag:
+                pattern_num_movements += 1
 
         if obs_num_movements > pattern_num_movements:
             is_suitable = False
@@ -686,10 +690,7 @@ def _get_obstacle_movement_period(obstacles_movement_status):
         if is_suitable:
             suitable_periods.append(period)
 
-    log(
-        f"There are {len(suitable_periods)} obstacle movement periods ({suitable_periods}), "
-        f"that fit the observation: {obstacles_movement_status}"
-    )
+    Global.OBSTACLE_MOVEMENT_PERIOD_OPTIONS = suitable_periods
 
     if not suitable_periods:
         log(
@@ -697,6 +698,16 @@ def _get_obstacle_movement_period(obstacles_movement_status):
             f"which would fits to the observation {obstacles_movement_status}",
             level=1,
         )
+        return
 
     if len(suitable_periods) == 1:
+        log(
+            f"There is only one obstacle movement period ({suitable_periods[0]}), "
+            f"that fit the observation: {obstacles_movement_status}"
+        )
         return suitable_periods[0]
+    else:
+        log(
+            f"There are {len(suitable_periods)} obstacle movement periods ({suitable_periods}), "
+            f"that fit the observation: {obstacles_movement_status}"
+        )
