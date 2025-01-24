@@ -13,6 +13,7 @@ from .base import (
     elements_moving,
     get_spawn_location,
     chebyshev_distance,
+    obstacles_moving,
 )
 from .path import ActionType
 from .grid import Grid
@@ -78,13 +79,12 @@ class State:
         self.fleet.update(obs, self.space)
         self.opp_fleet.update(obs, self.space)
 
-        # if (
-        #     Global.OBSTACLE_MOVEMENT_PERIOD == 0
-        #     or (self.global_step - 1) % Global.OBSTACLE_MOVEMENT_PERIOD != 0
-        # ):
-        #     self.space.update_nodes_by_expected_sensor_mask(
-        #         self.fleet.expected_sensor_mask()
-        #     )
+        if Global.OBSTACLE_MOVEMENT_PERIOD_FOUND and not obstacles_moving(
+            self.global_step
+        ):
+            self.space.update_nodes_by_expected_sensor_mask(
+                self.fleet.expected_sensor_mask()
+            )
 
         self._update_game_params()
 

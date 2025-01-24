@@ -190,27 +190,6 @@ class Space:
         if not Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
             self.add_obs_to_obstacles_movement_status_log(obs, obstacles_shifted)
 
-        def clear_map_info():
-            for n in self:
-                n.type = NodeType.unknown
-
-        if not Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND and obstacles_shifted:
-            direction = _get_obstacle_movement_direction(self, obs)
-            if direction:
-                Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND = True
-                Global.OBSTACLE_MOVEMENT_DIRECTION = direction
-                log(
-                    f"Find param OBSTACLE_MOVEMENT_DIRECTION = {direction}",
-                    level=2,
-                )
-
-                self.move(*Global.OBSTACLE_MOVEMENT_DIRECTION, inplace=True)
-                obstacles_shifted = False
-            else:
-                log("Can't find OBSTACLE_MOVEMENT_DIRECTION", level=1)
-                clear_map_info()
-
-        if not Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
             period = _get_obstacle_movement_period(Global.OBSTACLES_MOVEMENT_STATUS)
             if period is not None:
                 Global.OBSTACLE_MOVEMENT_PERIOD_FOUND = True
@@ -220,16 +199,22 @@ class Space:
                     level=2,
                 )
 
-            if obstacles_shifted:
-                clear_map_info()
+        if obstacles_shifted:
 
-        if (
-            obstacles_shifted
-            and Global.OBSTACLE_MOVEMENT_PERIOD_FOUND
-            and Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND
-        ):
-            log("OBSTACLE_MOVEMENTS params are incorrect", level=2)
-            clear_map_info()
+            direction = _get_obstacle_movement_direction(self, obs)
+            if direction:
+                Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND = True
+                Global.OBSTACLE_MOVEMENT_DIRECTION = direction
+                log(
+                    f"Find param OBSTACLE_MOVEMENT_DIRECTION = {direction}",
+                    level=2,
+                )
+                log(f"move obstacles, direction={Global.OBSTACLE_MOVEMENT_DIRECTION}")
+                self.move(*Global.OBSTACLE_MOVEMENT_DIRECTION, inplace=True)
+            else:
+                log("Can't find OBSTACLE_MOVEMENT_DIRECTION", level=1)
+                for node in self:
+                    node.type = NodeType.unknown
 
         for node in self:
             x, y = node.coordinates
@@ -356,7 +341,7 @@ class Space:
             and Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND
             and obstacles_moving(global_step)
         ):
-            log(f"move obstacles, direction {Global.OBSTACLE_MOVEMENT_DIRECTION}")
+            log(f"move obstacles, direction={Global.OBSTACLE_MOVEMENT_DIRECTION}")
             self.move(*Global.OBSTACLE_MOVEMENT_DIRECTION, inplace=True)
 
     def _update_reward_status_from_relics_distribution(self):
