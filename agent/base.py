@@ -27,6 +27,8 @@ class Global:
     OBSTACLE_MOVEMENT_PERIOD = 20
     OBSTACLE_MOVEMENT_PERIOD_OPTIONS = [20 / 3, 10, 20, 40]
     OBSTACLE_MOVEMENT_DIRECTION = (0, 0)  # OPTIONS: [(1, -1), (-1, 1)]
+    ENERGY_NODE_MOVEMENT_PERIOD = 25
+    ENERGY_NODE_MOVEMENT_PERIOD_OPTIONS = [20, 25, 100 / 3, 50, 100]
     UNIT_SAP_DROPOFF_FACTOR = 0.5  # OPTIONS: [0.25, 0.5, 1]
     UNIT_ENERGY_VOID_FACTOR = 0.125  # OPTIONS: [0.0625, 0.125, 0.25, 0.375]
     LAST_MATCH_STEP_WHEN_RELIC_CAN_APPEAR = 50
@@ -40,6 +42,7 @@ class Global:
     OBSTACLE_MOVEMENT_DIRECTION_FOUND = False
     UNIT_SAP_DROPOFF_FACTOR_FOUND = False
     UNIT_ENERGY_VOID_FACTOR_FOUND = False
+    ENERGY_NODE_MOVEMENT_PERIOD_FOUND = False
 
     # Info about completed matches
     NUM_COMPLETED_MATCHES = 0
@@ -56,13 +59,17 @@ class Global:
     # This data will help identify which nodes yield points.
     REWARD_RESULTS = []
 
-    # obstacles_movement_status: list of bool
+    # obstacles_movement_status: list of {True, False, None}
     # A history log of obstacle (asteroids and nebulae) movement events.
     # - `True`: The ships' sensors detected a change in the obstacles' positions at this step.
     # - `False`: The sensors did not detect any changes.
     # - `None`: It is unknown whether there have been changes or not.
-    # This information will be used to determine the speed and direction of obstacle movement.
+    # This information will be used to determine the speed of obstacle movement.
     OBSTACLES_MOVEMENT_STATUS = []
+
+    # energy_nodes_movement_status: list of {True, False, None}
+    # This information will be used to determine the speed of energy nodes.
+    ENERGY_NODES_MOVEMENT_STATUS = []
 
     # Game Params:
     class DefaultParams:
@@ -131,6 +138,8 @@ class Global:
         cls.NEBULA_ENERGY_REDUCTION = 10
         cls.OBSTACLE_MOVEMENT_PERIOD = 20
         cls.OBSTACLE_MOVEMENT_PERIOD_OPTIONS = [20 / 3, 10, 20, 40]
+        cls.ENERGY_NODE_MOVEMENT_PERIOD = 25
+        cls.ENERGY_NODE_MOVEMENT_PERIOD_OPTIONS = [20, 25, 100 / 3, 50, 100]
         cls.OBSTACLE_MOVEMENT_DIRECTION = (0, 0)
         cls.UNIT_SAP_DROPOFF_FACTOR = 0.5
         cls.UNIT_ENERGY_VOID_FACTOR = 0.125
@@ -142,6 +151,7 @@ class Global:
         cls.OBSTACLE_MOVEMENT_DIRECTION_FOUND = False
         cls.UNIT_SAP_DROPOFF_FACTOR_FOUND = False
         cls.UNIT_ENERGY_VOID_FACTOR_FOUND = False
+        cls.ENERGY_NODE_MOVEMENT_PERIOD_FOUND = False
 
         cls.NUM_COMPLETED_MATCHES = 0
         cls.NUM_WINS = 0
@@ -150,6 +160,7 @@ class Global:
 
         cls.REWARD_RESULTS = []
         cls.OBSTACLES_MOVEMENT_STATUS = []
+        cls.ENERGY_NODES_MOVEMENT_STATUS = []
 
         cls.Params = cls.DefaultParams
 
@@ -289,6 +300,12 @@ def obstacles_moving(step):
     if not Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
         return
     return elements_moving(step, movement_period=Global.OBSTACLE_MOVEMENT_PERIOD)
+
+
+def energy_nodes_moving(step):
+    if not Global.ENERGY_NODE_MOVEMENT_PERIOD_FOUND:
+        return
+    return elements_moving(step, movement_period=Global.ENERGY_NODE_MOVEMENT_PERIOD)
 
 
 class Task:

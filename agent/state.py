@@ -151,6 +151,17 @@ class State:
             d += 1
         return d
 
+    def num_steps_before_energy_node_movement(self):
+        if not Global.ENERGY_NODE_MOVEMENT_PERIOD_FOUND:
+            return
+
+        d = 1
+        while not elements_moving(
+            self.global_step + d - 1, Global.ENERGY_NODE_MOVEMENT_PERIOD
+        ):
+            d += 1
+        return d
+
     def create_actions_array(self):
         ships = self.fleet.ships
         actions = np.zeros((len(ships), 3), dtype=int)

@@ -163,12 +163,12 @@ class Space:
         opp_team_reward=0,
     ):
         self.move_obstacles(global_step)
-        self._update_map(obs)
+        self._update_map(global_step, obs)
         self._update_relic_map(
             global_step, obs, team_id, team_reward, opp_team_id, opp_team_reward
         )
 
-    def _update_map(self, obs):
+    def _update_map(self, global_step, obs):
         sensor_mask = obs["sensor_mask"]
         obs_energy = obs["map_features"]["energy"]
         obs_tile_type = obs["map_features"]["tile_type"]
@@ -186,6 +186,20 @@ class Space:
 
             if node.energy is not None and node.energy != obs_energy[x, y]:
                 energy_nodes_shifted = True
+
+        if not Global.ENERGY_NODE_MOVEMENT_PERIOD_FOUND:
+            Global.ENERGY_NODES_MOVEMENT_STATUS.append(energy_nodes_shifted)
+
+            period = _get_energy_nodes_movement_period(
+                Global.ENERGY_NODES_MOVEMENT_STATUS
+            )
+            if period is not None:
+                Global.ENERGY_NODE_MOVEMENT_PERIOD_FOUND = True
+                Global.ENERGY_NODE_MOVEMENT_PERIOD = period
+                log(
+                    f"Find param ENERGY_NODE_MOVEMENT_PERIOD = {period}",
+                    level=2,
+                )
 
         if not Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
             self.add_obs_to_obstacles_movement_status_log(obs, obstacles_shifted)
@@ -647,6 +661,9 @@ def _get_obstacle_movement_direction(space, obs):
 
 def _get_obstacle_movement_period(obstacles_movement_status):
 
+    if len(obstacles_movement_status) < 5:
+        return
+
     suitable_periods = []
     for period in Global.OBSTACLE_MOVEMENT_PERIOD_OPTIONS:
 
@@ -695,4 +712,60 @@ def _get_obstacle_movement_period(obstacles_movement_status):
         log(
             f"There are {len(suitable_periods)} obstacle movement periods ({suitable_periods}), "
             f"that fit the observation: {obstacles_movement_status}"
+        )
+
+
+def _get_energy_nodes_movement_period(energy_nodes_movement_status):
+
+    if len(energy_nodes_movement_status) < 15:
+        return
+
+    suitable_periods = []
+    for period in Global.ENERGY_NODE_MOVEMENT_PERIOD_OPTIONS:
+
+        moving_pattern = [
+            elements_moving(x, period) for x in range(len(energy_nodes_movement_status))
+        ]
+
+        is_suitable = True
+        obs_num_movements = 0
+        pattern_num_movements = 0
+        for pattern_flag, obs_flag in zip(moving_pattern, energy_nodes_movement_status):
+            if pattern_flag is True and obs_flag is False:
+                is_suitable = False
+                break
+
+            if obs_flag:
+                obs_num_movements += 1
+            if pattern_flag:
+                pattern_num_movements += 1
+
+        if obs_num_movements > pattern_num_movements:
+            is_suitable = False
+
+        if is_suitable:
+            suitable_periods.append(period)
+
+    Global.ENERGY_NODE_MOVEMENT_PERIOD_OPTIONS = suitable_periods
+
+    simple_obs = [s for s, x in enumerate(energy_nodes_movement_status) if x]
+
+    if not suitable_periods:
+        log(
+            f"Can't find an energy nodes movement period, "
+            f"which would fits to the observation {simple_obs}",
+            level=1,
+        )
+        return
+
+    if len(suitable_periods) == 1:
+        log(
+            f"There is only one energy nodes movement period ({suitable_periods[0]}), "
+            f"that fit the observation: {simple_obs}"
+        )
+        return suitable_periods[0]
+    else:
+        log(
+            f"There are {len(suitable_periods)} energy nodes movement periods ({suitable_periods}), "
+            f"that fit the observation: {simple_obs}"
         )
