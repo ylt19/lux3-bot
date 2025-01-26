@@ -25,7 +25,8 @@ class StaticField:
 
 
 class Field:
-    def __init__(self, state):
+    def __init__(self, state, previous_field=None):
+
         self._state = state
 
         (
@@ -35,6 +36,8 @@ class Field:
             self.energy_gain,
             self.unexplored_for_reward,
         ) = self._create_space_fields()
+
+        self.last_time_seen = self._get_last_time_seen_field(previous_field)
 
     @property
     def space(self):
@@ -429,6 +432,20 @@ class Field:
             control = add_control(control, (x, y))
 
         return positions
+
+    def _get_last_time_seen_field(self, previous_field):
+        if previous_field is None or self._state.match_step == 0:
+            field = create_empty_field()
+            field[:] = Global.MAX_STEPS_IN_MATCH
+            return field
+
+        field = previous_field.last_time_seen
+
+        field += 1
+        field *= np.logical_not(self.vision)
+        field = np.clip(field, a_min=0, a_max=Global.MAX_STEPS_IN_MATCH)
+
+        return field
 
 
 def create_empty_field():

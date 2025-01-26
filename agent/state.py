@@ -37,8 +37,8 @@ class State:
         self._reservation_table = None
         self._routes = None
 
-        self.grid = Grid(self)
-        self.field = Field(self)
+        self.grid = None
+        self.field = None
 
     def update(self, obs):
         self._reservation_table = None
@@ -60,6 +60,7 @@ class State:
             self.space.clear_exploration_info()
             self.space.move_obstacles(self.global_step)
             self._update_game_params()
+            self.field = Field(self)
             return
 
         points = int(obs["team_points"][self.team_id])
@@ -89,7 +90,7 @@ class State:
         self._update_game_params()
 
         self.grid = Grid(self)
-        self.field = Field(self)
+        self.field = Field(self, self.field)
 
     def _update_game_params(self):
 
