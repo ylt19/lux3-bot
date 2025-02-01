@@ -255,6 +255,14 @@ def warp_int(x):
     return x
 
 
+def clip_int(x):
+    if x < 0:
+        return 0
+    if x >= SPACE_SIZE:
+        return SPACE_SIZE - 1
+    return x
+
+
 def warp_point(x, y):
     return warp_int(x), warp_int(y)
 

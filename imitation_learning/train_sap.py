@@ -25,6 +25,7 @@ from agent.base import (
     get_nebula_tile_drift_speed,
     manhattan_distance,
     nearby_positions,
+    clip_position,
 )
 from agent.path import Action, ActionType
 from agent.state import State
@@ -34,7 +35,7 @@ EPISODES_DIR = "dataset/episodes"
 AGENT_EPISODES_DIR = "dataset/agent_episodes"
 MODEL_NAME = "sap_unet"
 
-N_CHANNELS = 16
+N_CHANNELS = 18
 N_GLOBAL = 15
 N_CLASSES = 1
 
@@ -127,12 +128,12 @@ def pars_agent_episode(agent_episode):
         if not is_win:
             continue
 
-        obs_array, saps = pars_obs(state, team_actions)
+        obs_array, saps = pars_obs(state, team_actions, game_params, exploration_flags)
 
-        obs_array[4:8] = previous_step_unit_array
+        obs_array[6:10] = previous_step_unit_array
         previous_step_unit_array = obs_array[:4]
 
-        obs_array[8] = previous_step_sap_array
+        obs_array[10] = previous_step_sap_array
         unit_sap_dropoff_factor = (
             game_params["unit_sap_dropoff_factor"]
             if step >= exploration_flags["unit_sap_dropoff_factor"]
@@ -171,7 +172,7 @@ def pars_agent_episode(agent_episode):
                 boundary="fill",
                 fillvalue=0,
             )
-            obs_array_coppy[15] = ship_arr
+            obs_array_coppy[17] = ship_arr
 
             if Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
                 nebula_tile_drift_direction = (
@@ -249,53 +250,87 @@ def fill_sap_array(
                     )
 
 
-def pars_obs(state, team_actions):
-    d = np.zeros((16, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+def pars_obs(state, team_actions, game_params, exploration_flags):
+    d = np.zeros((18, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+    saps = []
+
+    energy_field = state.field.energy
+    nebulae_field = state.field.nebulae
+
+    step = state.global_step
+    nebula_tile_energy_reduction = (
+        game_params["nebula_tile_energy_reduction"]
+        if step >= exploration_flags["nebula_energy_reduction"]
+        else 0
+    )
 
     # 0 - unit positions
     # 1 - unit energy
-    for unit in state.fleet:
-        if unit.energy >= 0:
-            x, y = unit.coordinates
-            d[0, y, x] += 1 / 10
-            d[1, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
-
-    # 2 - opp unit position
-    # 3 - opp unit energy
-    for unit in state.opp_fleet:
-        if unit.energy >= 0:
-            x, y = unit.coordinates
-            d[2, y, x] += 1 / 10
-            d[3, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
-
-    # 4 - previous step unit positions
-    # 5 - previous step unit energy
-    # 6 - previous step opp unit positions
-    # 7 - previous step opp unit energy
-
-    # 8 - previous step sap positions
-
-    d[9] = state.field.vision
-    d[10] = state.field.energy / Global.MAX_UNIT_ENERGY
-    d[11] = state.field.asteroid
-    d[12] = state.field.nebulae
-    d[13] = state.field.relic
-    d[14] = state.field.reward
-    # d[15] = state.field.unexplored_for_reward
-
-    saps = []
+    # 2 - unit next positions
+    # 3 - unit next energy
+    # 4 - other ships sap array
     for ship, action in zip(state.fleet.ships, team_actions):
-        if ship.node is not None and ship.energy >= 0:
-            action_type, dx, dy = action
-            if action_type == ActionType.sap.value:
-                x, y = ship.coordinates
+        if (
+            ship.node is not None
+            and ship.energy >= 0
+            and ship.steps_since_last_seen == 0
+        ):
+            x, y = ship.coordinates
+            d[0, y, x] += 1 / 10
+            d[1, y, x] += ship.energy / Global.MAX_UNIT_ENERGY
+
+            action_type, sap_dx, sap_dy = action
+            action_type = ActionType(action_type)
+            if action_type == ActionType.sap:
                 saps.append(
                     {
                         "unit_position": (x, y),
                         "unit_energy": ship.energy,
-                        "sap_position": (x + dx, y + dy),
+                        "sap_position": (x + sap_dx, y + sap_dy),
                     }
                 )
+
+            dx, dy = action_type.to_direction()
+
+            next_x = clip_position(x + dx)
+            next_y = clip_position(y + dy)
+
+            # if state.global_step == 75:
+            #     print(ship, action_type, next_x, next_y)
+
+            next_energy = ship.energy + energy_field[next_y, next_x]
+            if action_type == ActionType.sap:
+                next_energy -= Global.UNIT_SAP_COST
+            elif action_type != ActionType.center:
+                next_energy -= Global.UNIT_MOVE_COST
+
+            if nebulae_field[next_y, next_x]:
+                next_energy -= nebula_tile_energy_reduction
+
+            d[2, next_y, next_x] += 1 / 10
+            d[3, next_y, next_x] += next_energy / Global.MAX_UNIT_ENERGY
+
+    # 4 - opp unit position
+    # 5 - opp unit energy
+    for unit in state.opp_fleet:
+        if unit.energy >= 0:
+            x, y = unit.coordinates
+            d[4, y, x] += 1 / 10
+            d[5, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+
+    # 6 - previous step unit positions
+    # 7 - previous step unit energy
+    # 8 - previous step opp unit positions
+    # 9 - previous step opp unit energy
+    # 10 - previous step sap array
+
+    d[11] = state.field.vision
+    d[12] = state.field.energy / Global.MAX_UNIT_ENERGY
+    d[13] = state.field.asteroid
+    d[14] = state.field.nebulae
+    d[15] = state.field.relic
+    d[16] = state.field.reward
+    # d[17] = state.field.unexplored_for_reward
 
     return d, saps
 
@@ -483,6 +518,23 @@ def get_loss(policy, label):
     return loss
 
 
+def get_acc(policy, label):
+    correct = 0
+    total = 0
+    for p, a in zip(policy, label):
+        p = p.squeeze(0)
+        p = (p == p.max()).float()
+
+        a = a.squeeze(0)
+
+        is_correct = (p == a).sum() == SPACE_SIZE * SPACE_SIZE
+
+        correct += is_correct
+        total += 1
+
+    return correct, total
+
+
 def train_model(
     model, dataloaders_dict, optimizer, scheduler, num_epochs, model_name="model"
 ):
@@ -499,8 +551,8 @@ def train_model(
 
             epoch_loss = 0.0
             epoch_acc = 0
-
-            label_to_acc = {x: [0, 0] for x in ActionType}
+            correct = 0
+            total = 0
 
             dataloader = dataloaders_dict[phase]
             for item in tqdm(dataloader, leave=False):
@@ -516,19 +568,25 @@ def train_model(
                     if phase == "train":
                         loss.backward()
                         optimizer.step()
+                    else:
+                        _correct, _total = get_acc(policy, label)
+                        correct += _correct
+                        total += _total
 
                     epoch_loss += loss.item() * len(policy)
 
             data_size = len(dataloader.dataset)
             epoch_loss = epoch_loss / data_size
             if phase != "train":
+                epoch_acc = correct.double() / total
+
                 if scheduler is not None:
                     scheduler.step(epoch_loss)
 
-            time.sleep(10)
             print(
-                f"Epoch {epoch + 1}/{num_epochs} | {phase:^5} | Loss: {epoch_loss:.5f}"
+                f"Epoch {epoch + 1}/{num_epochs} | {phase:^5} | Loss: {epoch_loss:.5f} | Acc: {epoch_acc:.4f}"
             )
+            time.sleep(10)
 
         if epoch_loss < best_loss:
             traced = torch.jit.trace(
