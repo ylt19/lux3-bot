@@ -14,6 +14,7 @@ from .base import (
     get_match_step,
     elements_moving,
     obstacles_moving,
+    chebyshev_distance,
 )
 
 
@@ -37,6 +38,7 @@ class Node:
         self.type = NodeType.unknown
         self.energy = None
         self.is_visible = False
+        self.last_relic_check = -1
 
         self._relic = False
         self._reward = False
@@ -235,6 +237,9 @@ class Space:
             is_visible = bool(sensor_mask[x, y])
 
             node.is_visible = is_visible
+            if is_visible:
+                node.last_relic_check = global_step
+                self.get_opposite_node(x, y).last_relic_check = global_step
 
             if is_visible and node.is_unknown:
                 node.type = NodeType(int(obs_tile_type[x, y]))
@@ -257,15 +262,22 @@ class Space:
     def _update_relic_map(
         self, global_step, obs, team_id, team_reward, opp_team_id, opp_team_reward
     ):
+        match = get_match_number(global_step)
+
         for relic_id, (mask, xy) in enumerate(
             zip(obs["relic_nodes_mask"], obs["relic_nodes"])
         ):
             if mask and not self.get_node(*xy).relic:
                 # We have found a new relic.
                 self._update_relic_status(*xy, status=True)
+
+                # We need to find reward nodes next to the relic.
                 for x, y in nearby_positions(*xy, Global.RELIC_REWARD_RANGE):
                     if not self.get_node(x, y).reward:
                         self._update_reward_status(x, y, status=None)
+
+                for reward_result in Global.REWARD_RESULTS:
+                    reward_result["trust"] = False
 
         all_relics_found = True
         all_rewards_found = True
@@ -282,31 +294,19 @@ class Space:
         Global.ALL_RELICS_FOUND = all_relics_found
         Global.ALL_REWARDS_FOUND = all_rewards_found
 
-        match = get_match_number(global_step)
-        match_step = get_match_step(global_step)
-        num_relics_th = 2 * min(match, Global.LAST_MATCH_WHEN_RELIC_CAN_APPEAR) + 1
+        num_relics_found = sum(Global.RELIC_RESULTS)
+        # the maximum number of relics (without duplicates) we can find at this stage
+        num_relics_th = min(match, Global.LAST_MATCH_WHEN_RELIC_CAN_APPEAR) + 1
 
-        if not Global.ALL_RELICS_FOUND:
-            if len(self._relic_nodes) >= num_relics_th:
-                # all relics found, mark all nodes as explored for relics
-                Global.ALL_RELICS_FOUND = True
-                for node in self:
-                    if not node.explored_for_relic:
-                        self._update_relic_status(*node.coordinates, status=False)
+        if num_relics_found >= num_relics_th:
+            for node in self:
+                if not node.explored_for_relic:
+                    self._update_relic_status(*node.coordinates, status=False)
 
         if not Global.ALL_REWARDS_FOUND:
-            if (
-                match_step > Global.LAST_MATCH_STEP_WHEN_RELIC_CAN_APPEAR
-                or len(self._relic_nodes) >= num_relics_th
-            ):
-                self._update_reward_status_from_relics_distribution()
-                self._update_reward_results(
-                    obs, team_id, team_reward, full_visibility=True
-                )
-                self._update_reward_results(
-                    obs, opp_team_id, opp_team_reward, full_visibility=False
-                )
-                self._update_reward_status_from_reward_results()
+            self._update_reward_results(obs, team_id, team_reward, full_visibility=True)
+            self._filter_reward_results(global_step)
+            self._update_reward_status_from_reward_results()
 
     def add_obs_to_obstacles_movement_status_log(self, obs, obstacles_shifted):
         if obstacles_shifted:
@@ -400,29 +400,13 @@ class Space:
                 "nodes": ship_nodes,
                 "reward": team_reward,
                 "full_visibility": full_visibility,
+                "trust": None,
+                "known_relics": set(self.relic_nodes),
             }
-
-            if not full_visibility:
-                oov_nodes = []  # out-of-vision nodes that can potentially give points
-                for node in self:
-                    if not node.is_visible and (
-                        not node.explored_for_reward or node.reward
-                    ):
-                        oov_nodes.append(node)
-
-                record["oov_nodes"] = oov_nodes
 
             Global.REWARD_RESULTS.append(record)
 
     def _update_reward_status_from_reward_results(self):
-
-        for result in Global.REWARD_RESULTS:
-            if "oov_nodes" in result:
-                result["oov_nodes"] = [
-                    node
-                    for node in result["oov_nodes"]
-                    if not node.explored_for_reward or node.reward
-                ]
 
         count = 0
 
@@ -435,6 +419,9 @@ class Space:
 
             filtered_results = []
             for result in reward_results:
+
+                if not result["trust"]:
+                    continue
 
                 unknown_nodes = set()
                 known_reward = 0
@@ -477,33 +464,12 @@ class Space:
                             level=1,
                         )
                         continue
-                else:
-                    oov_reward_nodes = [
-                        node
-                        for node in result["oov_nodes"]
-                        if not node.explored_for_reward or node.reward
-                    ]
-
-                    if reward == len(unknown_nodes) + len(oov_reward_nodes):
-                        # all nodes yield points
-                        for node in unknown_nodes:
-                            updated = True
-                            self._update_reward_status(*node.coordinates, status=True)
-
-                        for node in oov_reward_nodes:
-                            updated = True
-                            self._update_reward_status(*node.coordinates, status=True)
-
-                        continue
-
-                    if reward >= len(unknown_nodes):
-                        # We can't see the entire fleet, we can't tell where these rewards came from
-                        continue
 
                 r = {
                     "nodes": unknown_nodes,
                     "reward": reward,
                     "full_visibility": result["full_visibility"],
+                    "trust": result["trust"],
                 }
                 if "oov_nodes" in result:
                     r["oov_nodes"] = result["oov_nodes"]
@@ -631,6 +597,96 @@ class Space:
         for node in self:
             if not node.relic:
                 self._update_relic_status(node.x, node.y, status=None)
+
+    def _filter_reward_results(self, step):
+
+        for reward_result in Global.REWARD_RESULTS:
+            if reward_result["trust"] is not None:
+                continue
+
+            result_step = reward_result["step"]
+            result_match = get_match_number(result_step)
+
+            relics_found = set()
+            for relic_node in reward_result["known_relics"]:
+                p = relic_node.coordinates
+                if p not in relics_found and get_opposite(*p) not in relics_found:
+                    relics_found.add(p)
+
+            num_relics_found = len(relics_found)
+            num_relics_th = (
+                min(result_match, Global.LAST_MATCH_WHEN_RELIC_CAN_APPEAR) + 1
+            )
+            found_all_relics = num_relics_found >= num_relics_th
+
+            if found_all_relics:
+                nodes = []
+                for node in reward_result["nodes"]:
+                    if any(
+                        chebyshev_distance(node.coordinates, relic_node.coordinates)
+                        <= Global.RELIC_REWARD_RANGE
+                        for relic_node in reward_result["known_relics"]
+                    ):
+                        nodes.append(node)
+
+                reward_result["nodes"] = nodes
+                reward_result["trust"] = True
+            else:
+
+                new_relics = set()
+                for relic_node in self.relic_nodes:
+                    if relic_node not in reward_result["known_relics"]:
+                        new_relics.add(relic_node)
+
+                node_info = []
+                for node in reward_result["nodes"]:
+
+                    within_relic_range = False
+                    unknown_neighbors = False
+                    within_new_relic_range = False
+                    for x, y in nearby_positions(
+                        *node.coordinates, Global.RELIC_REWARD_RANGE
+                    ):
+                        nearby_node = self.get_node(x, y)
+                        if nearby_node in reward_result["known_relics"]:
+                            within_relic_range = True
+
+                        if nearby_node.last_relic_check < result_step:
+                            unknown_neighbors = True
+
+                        if nearby_node in new_relics:
+                            within_new_relic_range = True
+
+                    node_info.append(
+                        {
+                            "node": node,
+                            "within_relic_range": within_relic_range,
+                            "unknown_neighbors": unknown_neighbors,
+                            "within_new_relic_range": within_new_relic_range,
+                        }
+                    )
+
+                # print(f"node info (step={reward_result['step']}):", file=stderr)
+                # for x in node_info:
+                #     print(f" - {x}", file=stderr)
+
+                if reward_result["reward"] == 0:
+                    reward_result["nodes"] = [
+                        x["node"] for x in node_info if x["within_relic_range"]
+                    ]
+                    reward_result["trust"] = True
+
+                elif any(x["within_new_relic_range"] for x in node_info):
+                    reward_result["trust"] = False
+
+                elif any(x["unknown_neighbors"] for x in node_info):
+                    reward_result["trust"] = None
+
+                else:
+                    reward_result["nodes"] = [
+                        x["node"] for x in node_info if x["within_relic_range"]
+                    ]
+                    reward_result["trust"] = True
 
 
 def _get_obstacle_movement_direction(space, obs):

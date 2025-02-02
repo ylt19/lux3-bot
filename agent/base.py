@@ -59,6 +59,9 @@ class Global:
     # This data will help identify which nodes yield points.
     REWARD_RESULTS = []
 
+    # How many relics did we find in each match
+    RELIC_RESULTS = [0 for _ in range(NUM_MATCHES_IN_GAME)]
+
     # obstacles_movement_status: list of {True, False, None}
     # A history log of obstacle (asteroids and nebulae) movement events.
     # - `True`: The ships' sensors detected a change in the obstacles' positions at this step.
@@ -159,6 +162,7 @@ class Global:
         cls.OPP_POINTS = []
 
         cls.REWARD_RESULTS = []
+        cls.RELIC_RESULTS = [0 for _ in range(cls.NUM_MATCHES_IN_GAME)]
         cls.OBSTACLES_MOVEMENT_STATUS = []
         cls.ENERGY_NODES_MOVEMENT_STATUS = []
 
