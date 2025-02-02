@@ -47,8 +47,8 @@ def get_observations(keggle_replay):
 def get_relic_info(params, observations):
     map_size = params["map_width"]
     relic_config_size = params["relic_config_size"]
-    relics = observations[0]["relic_nodes"]
-    relic_configs = observations[0]["relic_node_configs"]
+    relics = observations[-1]["relic_nodes"]
+    relic_configs = observations[-1]["relic_node_configs"]
 
     rewards = set()
     for (relic_x, relic_y), config in zip(relics, relic_configs):
@@ -119,6 +119,9 @@ def get_episode(episode_id, games_df=None):
 
 
 def get_episodes(submission_id, num_episodes=1000):
+    if not os.path.exists(OUTPUT_DIR):
+        os.mkdir(OUTPUT_DIR)
+
     games = pd.read_csv("games.csv")
     episodes = set(games[games["SubmissionId"] == submission_id]["EpisodeId"])
     episodes_to_download = []

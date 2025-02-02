@@ -3,11 +3,15 @@ import json
 import pickle
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 from pathlib import Path
 
 from agent.path import ActionType
-from agent.base import Global, chebyshev_distance, manhattan_distance
+from agent.base import (
+    Global,
+    chebyshev_distance,
+    manhattan_distance,
+    get_nebula_tile_drift_speed,
+)
 from agent.state import State
 from agent.space import NodeType
 
@@ -49,12 +53,16 @@ def convert_episode(episode_data, team_id):
 def convert_episodes(submission_id):
     dir_ = Path(__file__).parent
 
+    if not os.path.exists(f"{dir_}/agent_episodes"):
+        os.mkdir(f"{dir_}/agent_episodes")
+
     games = pd.read_csv(f"{dir_}/games.csv", usecols=["SubmissionId", "EpisodeId"])
     games = games[games["SubmissionId"] == submission_id]
 
     episodes = sorted([int(x) for x in games["EpisodeId"].unique()])
 
-    for episode_id in tqdm(episodes):
+    for i, episode_id in enumerate(episodes, start=1):
+        print(f"converting {episode_id}: {i}/{len(episodes)}")
         episode_path = f"{dir_}/episodes/{episode_id}.json"
         agent_episode_path = f"{dir_}/agent_episodes/{submission_id}_{episode_id}.pkl"
 
@@ -199,11 +207,24 @@ def estimate_hidden_constant_discovery_steps(
         if (
             nebula_tile_drift_speed_found_step == inf_step
             and Global.OBSTACLE_MOVEMENT_PERIOD_FOUND
+            and Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND
         ):
+            if (
+                abs(
+                    get_nebula_tile_drift_speed()
+                    - game_params["nebula_tile_drift_speed"]
+                )
+                > 0.001
+            ):
+                raise RuntimeError(
+                    f"nebula_tile_drift_speed is wrong, params={game_params['nebula_tile_drift_speed']}, "
+                    f"found={get_nebula_tile_drift_speed()}"
+                )
             nebula_tile_drift_speed_found_step = step
 
         if (
             Global.OBSTACLE_MOVEMENT_PERIOD_FOUND
+            and Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND
             and Global.UNIT_SAP_DROPOFF_FACTOR_FOUND
             and Global.NEBULA_ENERGY_REDUCTION_FOUND
             and Global.UNIT_ENERGY_VOID_FACTOR_FOUND

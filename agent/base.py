@@ -299,6 +299,10 @@ def get_nebula_tile_drift_speed():
     return speed
 
 
+def get_energy_node_drift_speed():
+    return 1 / Global.ENERGY_NODE_MOVEMENT_PERIOD
+
+
 def elements_moving(step, movement_period=None):
     speed = 1 / movement_period
     return (step - 2) * speed % 1 > (step - 1) * speed % 1
