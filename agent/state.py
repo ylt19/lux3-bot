@@ -56,7 +56,7 @@ class State:
         if self.match_step == 0:
             self.fleet.clear()
             self.opp_fleet.clear()
-            self.space.clear()
+            self.space.clear(self.global_step)
             self.space.clear_exploration_info()
             self.space.move_obstacles(self.global_step)
             self._update_game_params()

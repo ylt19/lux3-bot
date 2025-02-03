@@ -34,7 +34,8 @@ class Field:
             self.nebulae,
             self.energy,
             self.energy_gain,
-            self.unexplored_for_reward,
+            self.last_relic_check,
+            self.last_step_in_vision,
         ) = self._create_space_fields()
 
         self.last_time_seen = self._get_last_time_seen_field(previous_field)
@@ -49,7 +50,8 @@ class Field:
         energy_field = create_empty_field()
         energy_field[:] = Global.HIDDEN_NODE_ENERGY
         energy_gain_field = create_empty_field()
-        unexplored_for_reward = create_empty_field()
+        last_relic_check = create_empty_field()
+        last_step_in_vision = create_empty_field()
         for node in self.space:
             x, y = node.coordinates
             if node.type == NodeType.asteroid:
@@ -59,14 +61,15 @@ class Field:
             if node.energy is not None:
                 energy_field[y, x] = node.energy
             energy_gain_field[y, x] = node.energy_gain
-            if not node.explored_for_reward:
-                unexplored_for_reward[y, x] = 1
+            last_relic_check[y, x] = node.last_relic_check
+            last_step_in_vision[y, x] = node.last_step_in_vision
         return (
             asteroid_field,
             nebulae_field,
             energy_field,
             energy_gain_field,
-            unexplored_for_reward,
+            last_relic_check,
+            last_step_in_vision,
         )
 
     @cached_property

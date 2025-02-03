@@ -38,7 +38,8 @@ class Node:
         self.type = NodeType.unknown
         self.energy = None
         self.is_visible = False
-        self.last_relic_check = -1
+        self.last_relic_check = 0
+        self.last_step_in_vision = 0
 
         self._relic = False
         self._reward = False
@@ -240,6 +241,7 @@ class Space:
             if is_visible:
                 node.last_relic_check = global_step
                 self.get_opposite_node(x, y).last_relic_check = global_step
+                node.last_step_in_vision = global_step
 
             if is_visible and node.is_unknown:
                 node.type = NodeType(int(obs_tile_type[x, y]))
@@ -269,6 +271,7 @@ class Space:
         ):
             if mask and not self.get_node(*xy).relic:
                 # We have found a new relic.
+                Global.RELIC_RESULTS[match] += 1
                 self._update_relic_status(*xy, status=True)
 
                 # We need to find reward nodes next to the relic.
@@ -523,9 +526,10 @@ class Space:
     def reward_nodes(self) -> set[Node]:
         return self._reward_nodes
 
-    def clear(self):
+    def clear(self, global_step):
         for node in self:
             node.is_visible = False
+            node.last_step_in_vision = global_step
 
     def update_nodes_by_expected_sensor_mask(self, expected_sensor_mask):
         for y in range(SPACE_SIZE):
