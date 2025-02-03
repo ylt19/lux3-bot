@@ -198,10 +198,8 @@ def _find_nebula_energy_reduction(previous_state, state):
 
         if abs(delta - 25) < 5:
             Global.NEBULA_ENERGY_REDUCTION = 25
-        elif abs(delta - 10) < 5:
-            Global.NEBULA_ENERGY_REDUCTION = 10
-        elif abs(delta - 0) < 5:
-            Global.NEBULA_ENERGY_REDUCTION = 0
+        elif 0 <= delta <= 5:
+            Global.NEBULA_ENERGY_REDUCTION = delta
         else:
             log(
                 f"Can't find NEBULA_ENERGY_REDUCTION with ship = {ship}, "
