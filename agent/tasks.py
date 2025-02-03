@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import torch
 import numpy as np
 from scipy.signal import convolve2d
@@ -90,29 +92,31 @@ def apply_nn(state, previous_state, unit_model, sap_model):
         )
     policy = p.squeeze(0).numpy()
 
-    nodes_with_action = set()
-    sap_ships = []
+    node_to_ships = defaultdict(list)
     for ship in state.fleet:
+        node_to_ships[ship.node].append(ship)
 
-        if ship.node in nodes_with_action:
-            continue
+    sap_ships = []
+    for node, ships in node_to_ships.items():
+        if len(ships) > 1:
+            ships = ships[: len(ships) // 2]
 
-        nodes_with_action.add(ship.node)
+        for ship in ships:
 
-        if state.team_id == 0:
-            x, y = ship.coordinates
-            label = np.argsort(policy[:, y, x])[::-1]
-            label = int(label[0])
-        else:
-            x, y = get_opposite(*ship.coordinates)
-            label = np.argsort(policy[:, y, x])[::-1]
-            label = int(label[0])
-            label = ActionType(label).transpose(reflective=True).value
+            if state.team_id == 0:
+                x, y = ship.coordinates
+                label = np.argsort(policy[:, y, x])[::-1]
+                label = int(label[0])
+            else:
+                x, y = get_opposite(*ship.coordinates)
+                label = np.argsort(policy[:, y, x])[::-1]
+                label = int(label[0])
+                label = ActionType(label).transpose(reflective=True).value
 
-        if label == ActionType.sap:
-            sap_ships.append(ship)
-        else:
-            ship.action_queue = [Action(ActionType(label))]
+            if label == ActionType.sap:
+                sap_ships.append(ship)
+            else:
+                ship.action_queue = [Action(ActionType(label))]
 
     if sap_ships:
         apply_nn_sap_tasks(state, previous_state, sap_model, sap_ships)
