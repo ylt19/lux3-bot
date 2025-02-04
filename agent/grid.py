@@ -4,7 +4,7 @@ from functools import cached_property
 from pathfinding import Grid as w9_Grid, ResumableSpaceTimeDijkstra, ReservationTable
 
 from .path import NodeType
-from .base import Global, warp_point, cardinal_positions
+from .base import Global, warp_point, cardinal_positions, obstacles_moving
 
 
 class Grid:
@@ -138,10 +138,7 @@ def add_dynamic_environment(rt, state):
             match_step = state.match_step
             global_step = state.global_step
             while match_step <= Global.MAX_STEPS_IN_MATCH:
-                if (
-                    len(path) > 0
-                    and (global_step - 1) % Global.OBSTACLE_MOVEMENT_PERIOD == 0
-                ):
+                if len(path) > 0 and obstacles_moving(global_step):
                     rt.add_vertex_constraint(time=len(path), node=point)
                     point = warp_point(point[0] + shift[0], point[1] + shift[1])
                 path.append(point)
@@ -156,10 +153,7 @@ def add_dynamic_environment(rt, state):
             match_step = state.match_step
             global_step = state.global_step
             while match_step <= Global.MAX_STEPS_IN_MATCH:
-                if (
-                    len(path) > 1
-                    and (global_step - 2) % Global.OBSTACLE_MOVEMENT_PERIOD == 0
-                ):
+                if len(path) > 1 and obstacles_moving(global_step):
                     point = warp_point(point[0] + shift[0], point[1] + shift[1])
                 path.append(point)
                 match_step += 1
