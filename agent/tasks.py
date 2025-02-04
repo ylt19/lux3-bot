@@ -218,78 +218,6 @@ def get_sap_array(previous_state):
 
 def create_unit_nn_input(state, previous_state):
 
-    gf = np.zeros((14, 3, 3), dtype=np.float32)
-
-    if Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
-        nebula_tile_drift_direction = 1 if get_nebula_tile_drift_speed() > 0 else -1
-        num_steps_before_obstacle_movement = state.num_steps_before_obstacle_movement()
-    else:
-        nebula_tile_drift_direction = 0
-        num_steps_before_obstacle_movement = -Global.MAX_STEPS_IN_MATCH
-
-    gf[0] = nebula_tile_drift_direction
-    gf[1] = (
-        Global.NEBULA_ENERGY_REDUCTION / Global.MAX_UNIT_ENERGY
-        if Global.NEBULA_ENERGY_REDUCTION_FOUND
-        else -1
-    )
-    gf[2] = Global.UNIT_MOVE_COST / Global.MAX_UNIT_ENERGY
-    gf[3] = Global.UNIT_SAP_COST / Global.MAX_UNIT_ENERGY
-    gf[4] = Global.UNIT_SAP_RANGE / Global.SPACE_SIZE
-    gf[5] = (
-        Global.UNIT_SAP_DROPOFF_FACTOR if Global.UNIT_SAP_DROPOFF_FACTOR_FOUND else -1
-    )
-    gf[6] = (
-        Global.UNIT_ENERGY_VOID_FACTOR if Global.UNIT_ENERGY_VOID_FACTOR_FOUND else -1
-    )
-    gf[7] = state.match_step / Global.MAX_STEPS_IN_MATCH
-    gf[8] = state.match_number / Global.NUM_MATCHES_IN_GAME
-    gf[9] = num_steps_before_obstacle_movement / Global.MAX_STEPS_IN_MATCH
-    gf[10] = state.fleet.points / 1000
-    gf[11] = state.opp_fleet.points / 1000
-    gf[12] = state.fleet.reward / 1000
-    gf[13] = state.opp_fleet.reward / 1000
-
-    d = np.zeros((15, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
-
-    for unit in state.fleet:
-        x, y = unit.coordinates
-        d[0, y, x] += 1 / 10
-        d[1, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
-
-    for unit in state.opp_fleet:
-        x, y = unit.coordinates
-        d[2, y, x] += 1 / 10
-        d[3, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
-
-    for unit in previous_state.fleet:
-        x, y = unit.coordinates
-        d[4, y, x] += 1 / 10
-        d[5, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
-
-    for unit in previous_state.opp_fleet:
-        x, y = unit.coordinates
-        d[6, y, x] += 1 / 10
-        d[7, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
-
-    d[8] = get_sap_array(previous_state)
-
-    d[9] = state.field.vision
-    d[10] = state.field.energy / Global.MAX_UNIT_ENERGY
-    d[11] = state.field.asteroid
-    d[12] = state.field.nebulae
-    d[13] = state.field.relic
-    d[14] = state.field.reward
-    # d[15] = state.field.unexplored_for_reward
-
-    if state.team_id == 1:
-        d = transpose(d, reflective=True).copy()
-
-    return d, gf
-
-
-def create_sap_nn_input(state, previous_state, sap_ship):
-
     gf = np.zeros((15, 3, 3), dtype=np.float32)
 
     if Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
@@ -318,12 +246,88 @@ def create_sap_nn_input(state, previous_state, sap_ship):
     gf[8] = state.match_number / Global.NUM_MATCHES_IN_GAME
     gf[9] = num_steps_before_obstacle_movement / Global.MAX_STEPS_IN_MATCH
     gf[10] = state.fleet.points / 1000
-    gf[11] = state.opp_fleet.points / 1000
+    gf[11] = max(state.fleet.points - 5, state.opp_fleet.points) / 1000
     gf[12] = state.fleet.reward / 1000
     gf[13] = state.opp_fleet.reward / 1000
-    gf[14] = sap_ship.energy / Global.MAX_UNIT_ENERGY
+    gf[14] = sum(Global.RELIC_RESULTS) / 3
 
-    d = np.zeros((18, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
+    d = np.zeros((17, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
+
+    for unit in state.fleet:
+        x, y = unit.coordinates
+        d[0, y, x] += 1 / 10
+        d[1, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+
+    for unit in state.opp_fleet:
+        x, y = unit.coordinates
+        d[2, y, x] += 1 / 10
+        d[3, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+
+    for unit in previous_state.fleet:
+        x, y = unit.coordinates
+        d[4, y, x] += 1 / 10
+        d[5, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+
+    for unit in previous_state.opp_fleet:
+        x, y = unit.coordinates
+        d[6, y, x] += 1 / 10
+        d[7, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+
+    d[8] = get_sap_array(previous_state)
+
+    f = state.field
+    d[9] = f.vision
+    d[10] = f.energy / Global.MAX_UNIT_ENERGY
+    d[11] = f.asteroid
+    d[12] = f.nebulae
+    d[13] = f.relic
+    d[14] = f.reward
+    d[15] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
+    d[16] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
+
+    if state.team_id == 1:
+        d = transpose(d, reflective=True).copy()
+
+    return d, gf
+
+
+def create_sap_nn_input(state, previous_state, sap_ship):
+
+    gf = np.zeros((16, 3, 3), dtype=np.float32)
+
+    if Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
+        nebula_tile_drift_direction = 1 if get_nebula_tile_drift_speed() > 0 else -1
+        num_steps_before_obstacle_movement = state.num_steps_before_obstacle_movement()
+    else:
+        nebula_tile_drift_direction = 0
+        num_steps_before_obstacle_movement = -Global.MAX_STEPS_IN_MATCH
+
+    gf[0] = nebula_tile_drift_direction
+    gf[1] = (
+        Global.NEBULA_ENERGY_REDUCTION / Global.MAX_UNIT_ENERGY
+        if Global.NEBULA_ENERGY_REDUCTION_FOUND
+        else -1
+    )
+    gf[2] = Global.UNIT_MOVE_COST / Global.MAX_UNIT_ENERGY
+    gf[3] = Global.UNIT_SAP_COST / Global.MAX_UNIT_ENERGY
+    gf[4] = Global.UNIT_SAP_RANGE / Global.SPACE_SIZE
+    gf[5] = (
+        Global.UNIT_SAP_DROPOFF_FACTOR if Global.UNIT_SAP_DROPOFF_FACTOR_FOUND else -1
+    )
+    gf[6] = (
+        Global.UNIT_ENERGY_VOID_FACTOR if Global.UNIT_ENERGY_VOID_FACTOR_FOUND else -1
+    )
+    gf[7] = state.match_step / Global.MAX_STEPS_IN_MATCH
+    gf[8] = state.match_number / Global.NUM_MATCHES_IN_GAME
+    gf[9] = num_steps_before_obstacle_movement / Global.MAX_STEPS_IN_MATCH
+    gf[10] = state.fleet.points / 1000
+    gf[11] = max(state.fleet.points - 5, state.opp_fleet.points) / 1000
+    gf[12] = state.fleet.reward / 1000
+    gf[13] = state.opp_fleet.reward / 1000
+    gf[14] = sum(Global.RELIC_RESULTS) / 3
+    gf[15] = sap_ship.energy / Global.MAX_UNIT_ENERGY
+
+    d = np.zeros((20, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
 
     energy_field = state.field.energy
     nebulae_field = state.field.nebulae
@@ -375,13 +379,15 @@ def create_sap_nn_input(state, previous_state, sap_ship):
 
     d[10] = get_sap_array(previous_state)
 
-    d[11] = state.field.vision
-    d[12] = state.field.energy / Global.MAX_UNIT_ENERGY
-    d[13] = state.field.asteroid
-    d[14] = state.field.nebulae
-    d[15] = state.field.relic
-    d[16] = state.field.reward
-    # d[15] = state.field.unexplored_for_reward
+    f = state.field
+    d[11] = f.vision
+    d[12] = f.energy / Global.MAX_UNIT_ENERGY
+    d[13] = f.asteroid
+    d[14] = f.nebulae
+    d[15] = f.relic
+    d[16] = f.reward
+    d[17] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
+    d[18] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
 
     ship_arr = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int32)
     ship_arr[sap_ship.node.y, sap_ship.node.x] = 1
@@ -397,7 +403,7 @@ def create_sap_nn_input(state, previous_state, sap_ship):
         fillvalue=0,
     )
 
-    d[17] = ship_arr
+    d[19] = ship_arr
 
     if state.team_id == 1:
         d = transpose(d, reflective=True).copy()

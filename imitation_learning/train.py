@@ -26,8 +26,8 @@ EPISODES_DIR = "dataset/episodes"
 AGENT_EPISODES_DIR = "dataset/agent_episodes"
 MODEL_NAME = "unit_unet"
 
-N_CHANNELS = 15
-N_GLOBAL = 14
+N_CHANNELS = 17
+N_GLOBAL = 15
 N_CLASSES = 6
 
 GF_INFO = [
@@ -45,6 +45,7 @@ GF_INFO = [
     {"name": "opp_points", "m": 1000},
     {"name": "my_reward", "m": 1000},
     {"name": "opp_reward", "m": 1000},
+    {"name": "num_relics_found", "m": 3},
 ]
 
 
@@ -188,6 +189,7 @@ def pars_agent_episode(agent_episode):
                 state.opp_fleet.points / 1000,
                 state.fleet.reward / 1000,
                 state.opp_fleet.reward / 1000,
+                sum(Global.RELIC_RESULTS) / 3,
             )
 
             d = {
@@ -221,7 +223,7 @@ def fill_sap_array(
 
 
 def pars_obs(state, team_actions):
-    d = np.zeros((15, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+    d = np.zeros((17, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
 
     # 0 - unit positions
     # 1 - unit energy
@@ -246,13 +248,15 @@ def pars_obs(state, team_actions):
 
     # 8 - previous step sap positions
 
-    d[9] = state.field.vision
-    d[10] = state.field.energy / Global.MAX_UNIT_ENERGY
-    d[11] = state.field.asteroid
-    d[12] = state.field.nebulae
-    d[13] = state.field.relic
-    d[14] = state.field.reward
-    # d[15] = state.field.unexplored_for_reward
+    f = state.field
+    d[9] = f.vision
+    d[10] = f.energy / Global.MAX_UNIT_ENERGY
+    d[11] = f.asteroid
+    d[12] = f.nebulae
+    d[13] = f.relic
+    d[14] = f.reward
+    d[15] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
+    d[16] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
 
     actions = {}
     for ship, action in zip(state.fleet.ships, team_actions):

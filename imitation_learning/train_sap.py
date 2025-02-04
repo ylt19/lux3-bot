@@ -25,7 +25,7 @@ from agent.base import (
     get_nebula_tile_drift_speed,
     manhattan_distance,
     nearby_positions,
-    clip_position,
+    clip_int,
 )
 from agent.path import Action, ActionType
 from agent.state import State
@@ -35,8 +35,8 @@ EPISODES_DIR = "dataset/episodes"
 AGENT_EPISODES_DIR = "dataset/agent_episodes"
 MODEL_NAME = "sap_unet"
 
-N_CHANNELS = 18
-N_GLOBAL = 15
+N_CHANNELS = 20
+N_GLOBAL = 16
 N_CLASSES = 1
 
 GF_INFO = [
@@ -54,6 +54,7 @@ GF_INFO = [
     {"name": "opp_points", "m": 1000},
     {"name": "my_reward", "m": 1000},
     {"name": "opp_reward", "m": 1000},
+    {"name": "num_relics_found", "m": 3},
     {"name": "unit_energy", "m": Global.MAX_UNIT_ENERGY},
 ]
 
@@ -128,7 +129,12 @@ def pars_agent_episode(agent_episode):
         if not is_win:
             continue
 
-        obs_array, saps = pars_obs(state, team_actions, game_params, exploration_flags)
+        nebula_tile_energy_reduction_ = (
+            game_params["nebula_tile_energy_reduction"]
+            if step >= exploration_flags["nebula_energy_reduction"]
+            else 0
+        )
+        obs_array, saps = pars_obs(state, team_actions, nebula_tile_energy_reduction_)
 
         obs_array[6:10] = previous_step_unit_array
         previous_step_unit_array = obs_array[:4]
@@ -172,7 +178,7 @@ def pars_agent_episode(agent_episode):
                 boundary="fill",
                 fillvalue=0,
             )
-            obs_array_coppy[17] = ship_arr
+            obs_array_coppy[19] = ship_arr
 
             if Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
                 nebula_tile_drift_direction = (
@@ -212,6 +218,7 @@ def pars_agent_episode(agent_episode):
                 state.opp_fleet.points / 1000,
                 state.fleet.reward / 1000,
                 state.opp_fleet.reward / 1000,
+                sum(Global.RELIC_RESULTS) / 3,
                 sap["unit_energy"] / Global.MAX_UNIT_ENERGY,
             )
 
@@ -250,25 +257,17 @@ def fill_sap_array(
                     )
 
 
-def pars_obs(state, team_actions, game_params, exploration_flags):
-    d = np.zeros((18, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+def pars_obs(state, team_actions, nebula_tile_energy_reduction):
+    d = np.zeros((20, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
     saps = []
 
     energy_field = state.field.energy
     nebulae_field = state.field.nebulae
 
-    step = state.global_step
-    nebula_tile_energy_reduction = (
-        game_params["nebula_tile_energy_reduction"]
-        if step >= exploration_flags["nebula_energy_reduction"]
-        else 0
-    )
-
     # 0 - unit positions
     # 1 - unit energy
     # 2 - unit next positions
     # 3 - unit next energy
-    # 4 - other ships sap array
     for ship, action in zip(state.fleet.ships, team_actions):
         if (
             ship.node is not None
@@ -292,8 +291,8 @@ def pars_obs(state, team_actions, game_params, exploration_flags):
 
             dx, dy = action_type.to_direction()
 
-            next_x = clip_position(x + dx)
-            next_y = clip_position(y + dy)
+            next_x = clip_int(x + dx)
+            next_y = clip_int(y + dy)
 
             # if state.global_step == 75:
             #     print(ship, action_type, next_x, next_y)
@@ -324,13 +323,15 @@ def pars_obs(state, team_actions, game_params, exploration_flags):
     # 9 - previous step opp unit energy
     # 10 - previous step sap array
 
-    d[11] = state.field.vision
-    d[12] = state.field.energy / Global.MAX_UNIT_ENERGY
-    d[13] = state.field.asteroid
-    d[14] = state.field.nebulae
-    d[15] = state.field.relic
-    d[16] = state.field.reward
-    # d[17] = state.field.unexplored_for_reward
+    f = state.field
+    d[11] = f.vision
+    d[12] = f.energy / Global.MAX_UNIT_ENERGY
+    d[13] = f.asteroid
+    d[14] = f.nebulae
+    d[15] = f.relic
+    d[16] = f.reward
+    d[17] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
+    d[18] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
 
     return d, saps
 
