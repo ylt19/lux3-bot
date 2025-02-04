@@ -256,10 +256,14 @@ class Space:
                 # the energy field should be symmetrical
                 self.get_opposite_node(x, y).energy = node.energy
 
-            elif energy_nodes_shifted:
-                # The energy field has changed
-                # I cannot predict what the new energy field will be like.
-                node.energy = None
+        if energy_nodes_shifted:
+            # The energy field has changed
+            # I cannot predict what the new energy field will be like.
+            for node in self:
+                opp_node = self.get_opposite_node(*node.coordinates)
+                if not node.is_visible and not opp_node.is_visible:
+                    node.energy = None
+                    opp_node.energy = None
 
     def _update_relic_map(
         self, global_step, obs, team_id, team_reward, opp_team_id, opp_team_reward
