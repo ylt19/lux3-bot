@@ -254,24 +254,28 @@ def create_unit_nn_input(state, previous_state):
     d = np.zeros((17, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
 
     for unit in state.fleet:
-        x, y = unit.coordinates
-        d[0, y, x] += 1 / 10
-        d[1, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+        if unit.energy >= 0:
+            x, y = unit.coordinates
+            d[0, y, x] += 1 / 10
+            d[1, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
 
     for unit in state.opp_fleet:
-        x, y = unit.coordinates
-        d[2, y, x] += 1 / 10
-        d[3, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+        if unit.energy >= 0:
+            x, y = unit.coordinates
+            d[2, y, x] += 1 / 10
+            d[3, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
 
     for unit in previous_state.fleet:
-        x, y = unit.coordinates
-        d[4, y, x] += 1 / 10
-        d[5, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+        if unit.energy >= 0:
+            x, y = unit.coordinates
+            d[4, y, x] += 1 / 10
+            d[5, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
 
     for unit in previous_state.opp_fleet:
-        x, y = unit.coordinates
-        d[6, y, x] += 1 / 10
-        d[7, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+        if unit.energy >= 0:
+            x, y = unit.coordinates
+            d[6, y, x] += 1 / 10
+            d[7, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
 
     d[8] = get_sap_array(previous_state)
 
