@@ -119,7 +119,7 @@ def pars_agent_episode(agent_episode):
         obs_array, actions = pars_obs(state, team_actions)
 
         obs_array[4:8] = previous_step_unit_array
-        previous_step_unit_array = obs_array[:4]
+        previous_step_unit_array = obs_array[:4].copy()
 
         obs_array[8] = previous_step_sap_array
         unit_sap_dropoff_factor = (
