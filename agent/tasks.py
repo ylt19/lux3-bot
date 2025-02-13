@@ -256,26 +256,32 @@ def create_unit_nn_input(state, previous_state):
     for unit in state.fleet:
         if unit.energy >= 0:
             x, y = unit.coordinates
-            d[0, y, x] += 1 / 10
-            d[1, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+            d[0, y, x] += 1
+            d[1, y, x] += unit.energy
 
     for unit in state.opp_fleet:
         if unit.energy >= 0:
             x, y = unit.coordinates
-            d[2, y, x] += 1 / 10
-            d[3, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+            d[2, y, x] += 1
+            d[3, y, x] += unit.energy
 
     for unit in previous_state.fleet:
         if unit.energy >= 0:
             x, y = unit.coordinates
-            d[4, y, x] += 1 / 10
-            d[5, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+            d[4, y, x] += 1
+            d[5, y, x] += unit.energy
 
     for unit in previous_state.opp_fleet:
         if unit.energy >= 0:
             x, y = unit.coordinates
-            d[6, y, x] += 1 / 10
-            d[7, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+            d[6, y, x] += 1
+            d[7, y, x] += unit.energy
+
+    for i in [0, 2, 4, 6]:
+        d[i] /= 10
+
+    for i in [1, 3, 5, 7]:
+        d[i] /= Global.MAX_UNIT_ENERGY
 
     d[8] = get_sap_array(previous_state)
 
@@ -339,8 +345,8 @@ def create_sap_nn_input(state, previous_state, sap_ship):
     for unit in state.fleet:
         if unit.energy >= 0:
             x, y = unit.coordinates
-            d[0, y, x] += 1 / 10
-            d[1, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+            d[0, y, x] += 1
+            d[1, y, x] += unit.energy
 
             if unit.action_queue:
                 action_type = unit.action_queue[0].type
@@ -360,26 +366,32 @@ def create_sap_nn_input(state, previous_state, sap_ship):
             if nebulae_field[next_y, next_x]:
                 next_energy -= Global.NEBULA_ENERGY_REDUCTION
 
-            d[2, next_y, next_x] += 1 / 10
-            d[3, next_y, next_x] += next_energy / Global.MAX_UNIT_ENERGY
+            d[2, next_y, next_x] += 1
+            d[3, next_y, next_x] += next_energy
 
     for unit in state.opp_fleet:
         if unit.energy >= 0:
             x, y = unit.coordinates
-            d[4, y, x] += 1 / 10
-            d[5, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+            d[4, y, x] += 1
+            d[5, y, x] += unit.energy
 
     for unit in previous_state.fleet:
         if unit.energy >= 0:
             x, y = unit.coordinates
-            d[6, y, x] += 1 / 10
-            d[7, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+            d[6, y, x] += 1
+            d[7, y, x] += unit.energy
 
     for unit in previous_state.opp_fleet:
         if unit.energy >= 0:
             x, y = unit.coordinates
-            d[8, y, x] += 1 / 10
-            d[9, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+            d[8, y, x] += 1
+            d[9, y, x] += unit.energy
+
+    for i in [0, 2, 4, 6, 8]:
+        d[i] /= 10
+
+    for i in [1, 3, 5, 7, 9]:
+        d[i] /= Global.MAX_UNIT_ENERGY
 
     d[10] = get_sap_array(previous_state)
 

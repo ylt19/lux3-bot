@@ -275,8 +275,8 @@ def pars_obs(state, team_actions, nebula_tile_energy_reduction):
             and ship.steps_since_last_seen == 0
         ):
             x, y = ship.coordinates
-            d[0, y, x] += 1 / 10
-            d[1, y, x] += ship.energy / Global.MAX_UNIT_ENERGY
+            d[0, y, x] += 1
+            d[1, y, x] += ship.energy
 
             action_type, sap_dx, sap_dy = action
             action_type = ActionType(action_type)
@@ -306,16 +306,23 @@ def pars_obs(state, team_actions, nebula_tile_energy_reduction):
             if nebulae_field[next_y, next_x]:
                 next_energy -= nebula_tile_energy_reduction
 
-            d[2, next_y, next_x] += 1 / 10
-            d[3, next_y, next_x] += next_energy / Global.MAX_UNIT_ENERGY
+            d[2, next_y, next_x] += 1
+            d[3, next_y, next_x] += next_energy
 
     # 4 - opp unit position
     # 5 - opp unit energy
     for unit in state.opp_fleet:
         if unit.energy >= 0:
             x, y = unit.coordinates
-            d[4, y, x] += 1 / 10
-            d[5, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+            d[4, y, x] += 1
+            d[5, y, x] += unit.energy
+
+    d[0] /= 10
+    d[1] /= Global.MAX_UNIT_ENERGY
+    d[2] /= 10
+    d[3] /= Global.MAX_UNIT_ENERGY
+    d[4] /= 10
+    d[5] /= Global.MAX_UNIT_ENERGY
 
     # 6 - previous step unit positions
     # 7 - previous step unit energy

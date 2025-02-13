@@ -230,16 +230,21 @@ def pars_obs(state, team_actions):
     for unit in state.fleet:
         if unit.energy >= 0:
             x, y = unit.coordinates
-            d[0, y, x] += 1 / 10
-            d[1, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+            d[0, y, x] += 1
+            d[1, y, x] += unit.energy
 
     # 2 - opp unit position
     # 3 - opp unit energy
     for unit in state.opp_fleet:
         if unit.energy >= 0:
             x, y = unit.coordinates
-            d[2, y, x] += 1 / 10
-            d[3, y, x] += unit.energy / Global.MAX_UNIT_ENERGY
+            d[2, y, x] += 1
+            d[3, y, x] += unit.energy
+
+    d[0] /= 10
+    d[1] /= Global.MAX_UNIT_ENERGY
+    d[2] /= 10
+    d[3] /= Global.MAX_UNIT_ENERGY
 
     # 4 - previous step unit positions
     # 5 - previous step unit energy
