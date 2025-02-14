@@ -206,7 +206,7 @@ def get_sap_array(previous_state):
                 if x == sap_x and y == sap_y:
                     sap_array[y, x] += 1
                 else:
-                    sap_array[y, x] += Global.UNIT_SAP_DROPOFF_FACTOR_FOUND
+                    sap_array[y, x] += Global.UNIT_SAP_DROPOFF_FACTOR
 
     sap_array *= Global.UNIT_SAP_COST / Global.MAX_UNIT_ENERGY
 
