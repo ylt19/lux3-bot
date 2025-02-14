@@ -7,6 +7,7 @@ from .base import (
     SPACE_SIZE,
     get_spawn_location,
     nearby_positions,
+    obstacles_moving,
     cardinal_positions,
     manhattan_distance,
 )
@@ -173,12 +174,28 @@ def _find_nebula_energy_reduction(previous_state, state):
     if Global.NEBULA_ENERGY_REDUCTION_FOUND:
         return
 
+    spawn_position = state.fleet.spawn_position
+    opp_void_positions = set()
+    for ship in state.opp_fleet:
+        if ship.energy > 0:
+            for x, y in cardinal_positions(*ship.coordinates):
+                opp_void_positions.add((x, y))
+
+    check_previous_type = False
+    if not Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
+        check_previous_type = True
+    if Global.OBSTACLE_MOVEMENT_PERIOD_FOUND and obstacles_moving(state.global_step):
+        check_previous_type = True
+
     for previous_ship, ship in zip(previous_state.fleet.ships, state.fleet.ships):
         if not previous_ship.is_visible or not ship.is_visible:
             continue
 
         node = ship.node
         if node.energy is None:
+            continue
+
+        if ship.coordinates == spawn_position or ship.coordinates in opp_void_positions:
             continue
 
         move_cost = 0
@@ -188,15 +205,18 @@ def _find_nebula_energy_reduction(previous_state, state):
         if previous_ship.energy < 30 - move_cost:
             continue
 
+        if node.type != NodeType.nebula:
+            continue
+
         if (
-            node.type != NodeType.nebula
-            or previous_state.space.get_node(*node.coordinates).type != NodeType.nebula
+            check_previous_type
+            and previous_state.space.get_node(*node.coordinates).type != NodeType.nebula
         ):
             continue
 
         delta = previous_ship.energy - ship.energy + node.energy - move_cost
 
-        if abs(delta - 25) < 5:
+        if delta == 25:
             Global.NEBULA_ENERGY_REDUCTION = 25
         elif 0 <= delta <= 5:
             Global.NEBULA_ENERGY_REDUCTION = delta
