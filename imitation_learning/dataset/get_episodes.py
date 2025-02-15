@@ -5,6 +5,7 @@ import requests
 import pandas as pd
 from typing import Optional
 from dataclasses import dataclass
+from collections import defaultdict
 
 BASE_URL = "https://www.kaggle.com/api/i/competitions.EpisodeService/"
 GET_URL = BASE_URL + "GetEpisodeReplay"
@@ -118,11 +119,19 @@ def get_episode(episode_id, games_df=None):
     json.dump(data, open(path, "w"))
 
 
-def get_episodes(submission_id, num_episodes=1000):
+def get_episodes(submission_id, num_episodes=1000, min_score=None):
     if not os.path.exists(OUTPUT_DIR):
         os.mkdir(OUTPUT_DIR)
 
     games = pd.read_csv("games.csv")
+
+    if min_score is not None:
+        submissions = pd.read_csv("submissions.csv")
+        sid_id_to_score = dict(zip(submissions["submission_id"], submissions["score"]))
+        opp_scores = [sid_id_to_score[x] for x in games["OppSubmissionId"]]
+        games["opp_score"] = opp_scores
+        games = games[games["opp_score"] >= min_score]
+
     episodes = set(games[games["SubmissionId"] == submission_id]["EpisodeId"])
     episodes_to_download = []
     for episode_id in episodes:
@@ -143,8 +152,9 @@ def get_episodes(submission_id, num_episodes=1000):
 class Args:
     submission_id: int
     num_episodes: Optional[int] = 1000
+    min_score: Optional[int] = None
 
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    get_episodes(args.submission_id, args.num_episodes)
+    get_episodes(args.submission_id, args.num_episodes, args.min_score)
