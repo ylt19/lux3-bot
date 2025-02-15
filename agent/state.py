@@ -61,6 +61,8 @@ class State:
             self.space.move_obstacles(self.global_step)
             self._update_game_params()
             self.field = Field(self)
+            if self.match_number > 0 and not Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
+                Global.OBSTACLES_MOVEMENT_STATUS.append(None)
             return
 
         points = int(obs["team_points"][self.team_id])
