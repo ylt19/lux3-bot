@@ -59,18 +59,32 @@ GF_INFO = [
 ]
 
 
-def create_dataset_from_pickle(submission_ids, num_episodes=None):
-    paths = []
-    for submission_id in submission_ids:
-        paths += list(glob.glob(f"{AGENT_EPISODES_DIR}/{submission_id}_*.pkl"))
+def find_episodes(submission_ids, min_opp_score):
+    submissions_df = pd.read_csv("dataset/submissions.csv")
+    sid_id_to_score = dict(
+        zip(submissions_df["submission_id"], submissions_df["score"])
+    )
 
-    if num_episodes is not None:
-        paths = paths[:num_episodes]
+    games_df = pd.read_csv("dataset/games.csv")
+    games_df["opp_score"] = [sid_id_to_score[x] for x in games_df["OppSubmissionId"]]
+    games_df = games_df[
+        games_df["SubmissionId"].isin(submission_ids)
+        & (games_df["opp_score"] >= min_opp_score)
+    ]
 
+    episodes = []
+    for sid, episode_id in zip(games_df["SubmissionId"], games_df["EpisodeId"]):
+        path = f"{AGENT_EPISODES_DIR}/{sid}_{episode_id}.pkl"
+        if os.path.exists(path) and path not in episodes:
+            episodes.append(path)
+
+    return episodes
+
+
+def create_dataset_from_pickle(episodes):
     obses = []
-    for path in tqdm(paths):
+    for path in tqdm(episodes):
         obses += pars_agent_episode(pickle.load(open(path, "rb")))
-
     return obses
 
 
@@ -641,6 +655,7 @@ def train(data, model_name="model", num_epochs=5, batch_size=64):
     )
 
 
-def main():
-    data = create_dataset_from_pickle([42340565], num_episodes=None)
+def main(submission_ids, min_opp_score):
+    episodes = find_episodes(submission_ids, min_opp_score)
+    data = create_dataset_from_pickle(episodes)
     train(data, model_name=MODEL_NAME, num_epochs=15, batch_size=128)
