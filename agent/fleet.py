@@ -260,9 +260,6 @@ def _find_ship_interaction_constants(previous_state, state):
 
         sap_coordinates.append((x + dx, y + dy))
 
-    if not sap_coordinates:
-        return
-
     void_field = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int16)
     for previous_ship, ship in zip(previous_state.fleet.ships, state.fleet.ships):
         if not previous_ship.is_visible or previous_ship.energy <= 0:
@@ -271,7 +268,8 @@ def _find_ship_interaction_constants(previous_state, state):
         node = ship.node
         move_cost = 0
         if node is None:
-            node = previous_ship.node
+            next_position = previous_ship.next_position()
+            node = state.space.get_node(*next_position)
         elif node != previous_ship.node:
             move_cost = Global.UNIT_MOVE_COST
 
@@ -412,8 +410,7 @@ def _find_unit_energy_void_factor(
 ):
     position_to_unit_count = defaultdict(int)
     for opp_ship in state.opp_fleet:
-        if opp_ship.energy >= 0:
-            position_to_unit_count[opp_ship.coordinates] += 1
+        position_to_unit_count[opp_ship.coordinates] += 1
 
     for previous_opp_ship, opp_ship in zip(
         previous_state.opp_fleet.ships, state.opp_fleet.ships
@@ -425,11 +422,20 @@ def _find_unit_energy_void_factor(
             continue
 
         x, y = opp_ship.coordinates
-        if (
-            void_field[x, y] > 0
-            and direct_sap_hits[x, y] == 0
-            and adjacent_sap_hits[x, y] == 0
+        if void_field[x, y] > 0 and not _can_opp_sap(
+            previous_opp_ship, opp_ship, additional_energy_loss
         ):
+            num_direct_hits = int(direct_sap_hits[x, y])
+            num_adjacent_hits = int(adjacent_sap_hits[x, y])
+
+            if num_adjacent_hits > 0 and not Global.UNIT_SAP_DROPOFF_FACTOR_FOUND:
+                continue
+
+            hit_loss = int(
+                Global.UNIT_SAP_COST
+                * (num_direct_hits + num_adjacent_hits * Global.UNIT_SAP_DROPOFF_FACTOR)
+            )
+
             node_void_field = int(void_field[x, y])
             node_unit_count = position_to_unit_count[(x, y)]
 
@@ -446,7 +452,13 @@ def _find_unit_energy_void_factor(
                     continue
                 move_cost += Global.NEBULA_ENERGY_REDUCTION
 
-            delta = previous_opp_ship.energy - opp_ship.energy + node.energy - move_cost
+            delta = (
+                previous_opp_ship.energy
+                - opp_ship.energy
+                + node.energy
+                - move_cost
+                - hit_loss
+            )
 
             options = [0.0625, 0.125, 0.25, 0.375]
             results = []
@@ -471,7 +483,9 @@ def _find_unit_energy_void_factor(
             if sum(results) == 0:
                 log(
                     f"Can't find UNIT_ENERGY_VOID_FACTOR with ship = {opp_ship}, "
-                    f"delta = {delta}, void_field = {node_void_field}, step = {state.global_step}",
+                    f"delta = {delta}, void_field = {node_void_field}, "
+                    f"num_direct_hits = {num_direct_hits}, num_adjacent_hits = {num_adjacent_hits}, "
+                    f"step = {state.global_step}",
                     level=1,
                 )
 
@@ -479,7 +493,6 @@ def _find_unit_energy_void_factor(
 def find_additional_energy_loss(previous_state, state):
     ship_to_energy_loss = {}
 
-    log(state.global_step, Global.NEBULA_ENERGY_REDUCTION_FOUND)
     for previous_ship, ship in zip(previous_state.fleet.ships, state.fleet.ships):
         if not previous_ship.is_visible or not ship.is_visible:
             continue
