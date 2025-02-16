@@ -10,6 +10,7 @@ from .base import (
     obstacles_moving,
     cardinal_positions,
     manhattan_distance,
+    chebyshev_distance,
 )
 from .path import Action, ActionType, apply_action, actions_to_path
 from .space import Node, Space, NodeType
@@ -280,23 +281,59 @@ def _find_ship_interaction_constants(previous_state, state):
     direct_sap_hits = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int16)
     adjacent_sap_hits = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int16)
     for x, y in sap_coordinates:
-        direct_sap_hits[x, y] += 1
         for x_, y_ in nearby_positions(x, y, distance=1):
-            adjacent_sap_hits[x_, y_] += 1
+            if x_ == x and y_ == y:
+                direct_sap_hits[x_, y_] += 1
+            else:
+                adjacent_sap_hits[x_, y_] += 1
+
+    additional_energy_loss = find_additional_energy_loss(previous_state, state)
 
     if not Global.UNIT_SAP_DROPOFF_FACTOR_FOUND:
         _find_unit_sap_dropoff_factor(
-            previous_state, state, void_field, direct_sap_hits, adjacent_sap_hits
+            previous_state,
+            state,
+            void_field,
+            direct_sap_hits,
+            adjacent_sap_hits,
+            additional_energy_loss,
         )
 
     if not Global.UNIT_ENERGY_VOID_FACTOR_FOUND:
         _find_unit_energy_void_factor(
-            previous_state, state, void_field, direct_sap_hits, adjacent_sap_hits
+            previous_state,
+            state,
+            void_field,
+            direct_sap_hits,
+            adjacent_sap_hits,
+            additional_energy_loss,
         )
 
 
+def _can_opp_sap(previous_opp_ship, opp_ship, additional_energy_loss):
+    if not previous_opp_ship.can_sap():
+        return False
+
+    if opp_ship.node != previous_opp_ship.node:
+        return False
+
+    for my_ship, energy_loss in additional_energy_loss.items():
+        if (
+            chebyshev_distance(my_ship.coordinates, opp_ship.coordinates)
+            <= Global.UNIT_SAP_RANGE + 1
+        ):
+            return True
+
+    return False
+
+
 def _find_unit_sap_dropoff_factor(
-    previous_state, state, void_field, direct_sap_hits, adjacent_sap_hits
+    previous_state,
+    state,
+    void_field,
+    direct_sap_hits,
+    adjacent_sap_hits,
+    additional_energy_loss,
 ):
     for previous_opp_ship, opp_ship in zip(
         previous_state.opp_fleet.ships, state.opp_fleet.ships
@@ -310,10 +347,11 @@ def _find_unit_sap_dropoff_factor(
         x, y = opp_ship.coordinates
         if (
             void_field[x, y] == 0
-            and direct_sap_hits[x, y] == 0
             and adjacent_sap_hits[x, y] > 0
+            and not _can_opp_sap(previous_opp_ship, opp_ship, additional_energy_loss)
         ):
-            num_hits = int(adjacent_sap_hits[x, y])
+            num_direct_hits = int(direct_sap_hits[x, y])
+            num_adjacent_hits = int(adjacent_sap_hits[x, y])
 
             node = opp_ship.node
             if node.energy is None:
@@ -328,9 +366,15 @@ def _find_unit_sap_dropoff_factor(
                     continue
                 move_cost += Global.NEBULA_ENERGY_REDUCTION
 
-            delta = previous_opp_ship.energy - opp_ship.energy + node.energy - move_cost
+            delta = (
+                previous_opp_ship.energy
+                - opp_ship.energy
+                + node.energy
+                - move_cost
+                - num_direct_hits * Global.UNIT_SAP_COST
+            )
 
-            delta_per_hit = delta / num_hits
+            delta_per_hit = delta / num_adjacent_hits
 
             sap_cost = Global.UNIT_SAP_COST
 
@@ -343,7 +387,8 @@ def _find_unit_sap_dropoff_factor(
             else:
                 log(
                     f"Can't find UNIT_SAP_DROPOFF_FACTOR with ship = {opp_ship}, "
-                    f"delta = {delta}, num_hits = {num_hits}, step = {state.global_step}",
+                    f"delta = {delta}, num_direct_hits = {num_direct_hits}, "
+                    f"num_adjacent_hits = {num_adjacent_hits}, step = {state.global_step}",
                     level=1,
                 )
                 continue
@@ -358,7 +403,12 @@ def _find_unit_sap_dropoff_factor(
 
 
 def _find_unit_energy_void_factor(
-    previous_state, state, void_field, direct_sap_hits, adjacent_sap_hits
+    previous_state,
+    state,
+    void_field,
+    direct_sap_hits,
+    adjacent_sap_hits,
+    additional_energy_loss,
 ):
     position_to_unit_count = defaultdict(int)
     for opp_ship in state.opp_fleet:
@@ -424,3 +474,42 @@ def _find_unit_energy_void_factor(
                     f"delta = {delta}, void_field = {node_void_field}, step = {state.global_step}",
                     level=1,
                 )
+
+
+def find_additional_energy_loss(previous_state, state):
+    ship_to_energy_loss = {}
+
+    log(state.global_step, Global.NEBULA_ENERGY_REDUCTION_FOUND)
+    for previous_ship, ship in zip(previous_state.fleet.ships, state.fleet.ships):
+        if not previous_ship.is_visible or not ship.is_visible:
+            continue
+
+        node = ship.node
+
+        if node.energy is None:
+            continue
+
+        if previous_ship.energy <= 0:
+            continue
+
+        move_cost = 0
+        if node != previous_ship.node:
+            move_cost = Global.UNIT_MOVE_COST
+        elif (
+            previous_ship.action_queue
+            and previous_ship.can_sap()
+            and previous_ship.action_queue[0].type == ActionType.sap
+        ):
+            move_cost = Global.UNIT_SAP_COST
+
+        if previous_state.space.get_node_type(*node.coordinates) == NodeType.nebula:
+            if not Global.NEBULA_ENERGY_REDUCTION_FOUND:
+                continue
+            move_cost += Global.NEBULA_ENERGY_REDUCTION
+
+        delta = previous_ship.energy - ship.energy + node.energy - move_cost
+
+        if delta > 0:
+            ship_to_energy_loss[ship] = delta
+
+    return ship_to_energy_loss
