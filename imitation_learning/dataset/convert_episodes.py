@@ -1,73 +1,333 @@
 import os
+import sys
+
 import json
-import pickle
+import tyro
+import random
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
+from typing import Optional
 from pathlib import Path
+from dataclasses import dataclass
 
-from agent.path import ActionType
+WORKING_FOLDER = Path(__file__).parent
+BOT_DIR = WORKING_FOLDER.parent.parent
+sys.path.append(str(BOT_DIR))
+
+from agent.path import Action, ActionType
 from agent.base import (
     Global,
-    chebyshev_distance,
+    SPACE_SIZE,
+    transpose,
+    get_opposite,
+    nearby_positions,
     manhattan_distance,
+    chebyshev_distance,
     get_nebula_tile_drift_speed,
 )
-from agent.state import State
 from agent.space import NodeType
+from agent.state import State
+
+EPISODES_DIR = f"{WORKING_FOLDER}/episodes"
+OUTPUT_DIR = f"{WORKING_FOLDER}/agent_episodes"
+SUBMISSIONS_PATH = f"{WORKING_FOLDER}/submissions.csv"
+GAMES_PATH = f"{WORKING_FOLDER}/games.csv"
 
 
 def convert_episode(episode_data, team_id):
     win_teams = get_win_team_by_match(episode_data)
     wins = [x == team_id for x in win_teams]
-    num_wins = sum(wins)
+    if not any(wins):
+        return
+
+    obs_array_list, gf_list, action_list, step_list = [], [], [], []
+
+    Global.clear()
+    Global.VERBOSITY = 1
 
     game_params = episode_data["params"]
-    team_actions = np.array(
-        [x[f"player_{team_id}"] for x in episode_data["actions"]], dtype=np.int8
-    )
-    team_observations = [
-        convert_episode_step(x, team_id) for x in episode_data["observations"]
-    ]
+    Global.MAX_UNITS = game_params["max_units"]
+    Global.UNIT_MOVE_COST = game_params["unit_move_cost"]
+    Global.UNIT_SAP_COST = game_params["unit_sap_cost"]
+    Global.UNIT_SAP_RANGE = game_params["unit_sap_range"]
+    Global.UNIT_SENSOR_RANGE = game_params["unit_sensor_range"]
 
-    exploration_flags = estimate_hidden_constant_discovery_steps(
-        team_id, team_observations, team_actions, game_params
-    )
+    state = State(team_id)
+    previous_step_unit_array = np.zeros((4, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+    previous_step_sap_array = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+    previous_step_sap_positions = set()
+    previous_step_opp_ships = set()
+    for episode_observations, episode_actions in zip(
+        episode_data["observations"], episode_data["actions"]
+    ):
+        team_observation = convert_episode_step(episode_observations, team_id)
+        team_actions = episode_actions[f"player_{team_id}"]
 
-    agent_episode = {
-        "wins": wins,
-        "num_wins": num_wins,
-        "team_id": team_id,
-        "episode_id": episode_data["metadata"]["episode_id"],
-        "seed": episode_data["metadata"]["seed"],
-        "agent": episode_data["metadata"]["agents"][team_id],
-        "opponent": episode_data["metadata"]["agents"][1 - team_id],
-        "observations": team_observations,
-        "actions": team_actions,
-        "params": episode_data["params"],
-        "exploration_flags": exploration_flags,
+        state.update(team_observation)
+
+        # print(f"start step {state.global_step}")
+
+        update_exploration_flags(
+            state,
+            team_actions,
+            game_params,
+            previous_step_sap_positions,
+            previous_step_opp_ships,
+        )
+
+        if state.match_step == 0:
+            previous_step_unit_array[:] = 0
+            previous_step_sap_array[:] = 0
+            continue
+
+        if any(
+            num_wins > Global.NUM_MATCHES_IN_GAME / 2
+            for num_wins in team_observation["team_wins"]
+        ):
+            break
+
+        is_win = wins[state.match_number]
+        if not is_win:
+            continue
+
+        obs_array, position_to_action = pars_obs(state, team_actions)
+
+        obs_array[4:8] = previous_step_unit_array
+        previous_step_unit_array = obs_array[:4].copy()
+
+        obs_array[8] = previous_step_sap_array
+        unit_sap_dropoff_factor = (
+            game_params["unit_sap_dropoff_factor"]
+            if Global.UNIT_SAP_DROPOFF_FACTOR_FOUND
+            else 0.5
+        )
+        fill_sap_array(
+            state, team_actions, previous_step_sap_array, unit_sap_dropoff_factor
+        )
+
+        add_to_dataset = True
+        if not position_to_action:
+            add_to_dataset = False
+        if (
+            all(x == ActionType.center for x in position_to_action.values())
+            and random.random() > 0.1
+        ):
+            add_to_dataset = False
+
+        if add_to_dataset:
+
+            if team_id == 1:
+                obs_array = transpose(obs_array, reflective=True)
+                flipped_actions = {}
+                for (x, y), action_id in position_to_action.items():
+                    x, y = get_opposite(x, y)
+                    action_id = ActionType(action_id).transpose(reflective=True).value
+                    flipped_actions[(x, y)] = action_id
+                position_to_action = flipped_actions
+
+            if (
+                Global.OBSTACLE_MOVEMENT_PERIOD_FOUND
+                and Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND
+            ):
+                nebula_tile_drift_direction = (
+                    1 if get_nebula_tile_drift_speed() > 0 else -1
+                )
+                num_steps_before_obstacle_movement = (
+                    state.num_steps_before_obstacle_movement()
+                )
+            else:
+                nebula_tile_drift_direction = 0
+                num_steps_before_obstacle_movement = -Global.MAX_STEPS_IN_MATCH
+
+            gf = (
+                nebula_tile_drift_direction,
+                (
+                    game_params["nebula_tile_energy_reduction"] / Global.MAX_UNIT_ENERGY
+                    if Global.NEBULA_ENERGY_REDUCTION_FOUND
+                    else -1
+                ),
+                Global.UNIT_MOVE_COST / Global.MAX_UNIT_ENERGY,
+                Global.UNIT_SAP_COST / Global.MAX_UNIT_ENERGY,
+                Global.UNIT_SAP_RANGE / Global.SPACE_SIZE,
+                (
+                    game_params["unit_sap_dropoff_factor"]
+                    if Global.UNIT_SAP_DROPOFF_FACTOR_FOUND
+                    else -1
+                ),
+                (
+                    game_params["unit_energy_void_factor"]
+                    if Global.UNIT_ENERGY_VOID_FACTOR_FOUND
+                    else -1
+                ),
+                state.match_step / Global.MAX_STEPS_IN_MATCH,
+                state.match_number / Global.NUM_MATCHES_IN_GAME,
+                num_steps_before_obstacle_movement / Global.MAX_STEPS_IN_MATCH,
+                state.fleet.points / 1000,
+                state.opp_fleet.points / 1000,
+                state.fleet.reward / 1000,
+                state.opp_fleet.reward / 1000,
+                sum(Global.RELIC_RESULTS) / 3,
+            )
+
+            obs_array_list.append(obs_array)
+            gf_list.append(gf)
+            action_list.append(
+                [[x, y, int(a)] for (x, y), a in position_to_action.items()]
+                + [
+                    [-1, -1, -1]
+                    for _ in range(Global.MAX_UNITS - len(position_to_action))
+                ]
+            )
+            step_list.append(state.global_step)
+
+    return {
+        "states": np.array(obs_array_list, dtype=np.float16),
+        "gfs": np.array(gf_list, dtype=np.float16),
+        "actions": np.array(action_list, dtype=np.int8),
+        "steps": np.array(step_list, dtype=np.int16),
     }
 
-    return agent_episode
+
+def pars_obs(state, team_actions):
+    d = np.zeros((17, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+
+    # 0 - unit positions
+    # 1 - unit energy
+    for unit in state.fleet:
+        if unit.energy >= 0:
+            x, y = unit.coordinates
+            d[0, y, x] += 1
+            d[1, y, x] += unit.energy
+
+    # 2 - opp unit position
+    # 3 - opp unit energy
+    for unit in state.opp_fleet:
+        if unit.energy >= 0:
+            x, y = unit.coordinates
+            d[2, y, x] += 1
+            d[3, y, x] += unit.energy
+
+    d[0] /= 10
+    d[1] /= Global.MAX_UNIT_ENERGY
+    d[2] /= 10
+    d[3] /= Global.MAX_UNIT_ENERGY
+
+    # 4 - previous step unit positions
+    # 5 - previous step unit energy
+    # 6 - previous step opp unit positions
+    # 7 - previous step opp unit energy
+
+    # 8 - previous step sap positions
+
+    f = state.field
+    d[9] = f.vision
+    d[10] = f.energy / Global.MAX_UNIT_ENERGY
+    d[11] = f.asteroid
+    d[12] = f.nebulae
+    d[13] = f.relic
+    d[14] = f.reward
+    d[15] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
+    d[16] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
+
+    actions = {}
+    for ship, action in zip(state.fleet.ships, team_actions):
+        if ship.node is not None and ship.energy >= 0:
+            action_type, dx, dy = action
+            position = ship.coordinates
+            if position not in actions:
+                actions[position] = action_type
+            else:
+                if action_type != ActionType.center:
+                    actions[position] = action_type
+
+    return d, actions
 
 
-def convert_episodes(submission_id):
-    dir_ = Path(__file__).parent
+def fill_sap_array(
+    state, team_actions, previous_step_sap_array, unit_sap_dropoff_factor
+):
+    previous_step_sap_array[:] = 0
+    for ship, (action_type, dx, dy) in zip(state.fleet.ships, team_actions):
+        if action_type == ActionType.sap and ship.node is not None and ship.can_sap():
+            sap_x = ship.node.x + dx
+            sap_y = ship.node.y + dy
+            for x, y in nearby_positions(sap_x, sap_y, 1):
+                if x == sap_x and y == sap_y:
+                    previous_step_sap_array[y, x] += 1
+                else:
+                    previous_step_sap_array[y, x] += unit_sap_dropoff_factor
+    previous_step_sap_array *= Global.UNIT_SAP_COST / Global.MAX_UNIT_ENERGY
 
-    if not os.path.exists(f"{dir_}/agent_episodes"):
-        os.mkdir(f"{dir_}/agent_episodes")
 
-    games = pd.read_csv(f"{dir_}/games.csv", usecols=["SubmissionId", "EpisodeId"])
+def apply_actions(state, team_action):
+    position_to_action = {}
+    for ship, (action_type, dx, dy) in zip(state.fleet.ships, team_action):
+        if ship.node is not None and ship.energy >= 0:
+            action_type = ActionType(action_type)
+            if action_type == ActionType.sap:
+                ship.action_queue = [Action(action_type, dx, dy)]
+            else:
+                ship.action_queue = [Action(action_type)]
+
+            position = ship.coordinates
+            if position not in position_to_action:
+                position_to_action[position] = action_type
+            else:
+                if action_type != ActionType.center:
+                    position_to_action[position] = action_type
+
+    if state.team_id == 1:
+        flipped_actions = {}
+        for (x, y), action_id in position_to_action.items():
+            x, y = get_opposite(x, y)
+            action_id = ActionType(action_id).transpose(reflective=True).value
+            flipped_actions[(x, y)] = action_id
+        position_to_action = flipped_actions
+
+    return position_to_action
+
+
+def convert_episodes(submission_id, num_episodes=None, min_opp_score=None):
+
+    if not os.path.exists(OUTPUT_DIR):
+        os.mkdir(OUTPUT_DIR)
+
+    games = pd.read_csv(
+        GAMES_PATH, usecols=["SubmissionId", "EpisodeId", "OppSubmissionId"]
+    )
     games = games[games["SubmissionId"] == submission_id]
+
+    if min_opp_score is not None:
+        submissions_df = pd.read_csv(
+            SUBMISSIONS_PATH, usecols=["submission_id", "score"]
+        )
+        sid_to_score = dict(
+            zip(submissions_df["submission_id"], submissions_df["score"])
+        )
+        games["opp_score"] = [sid_to_score[x] for x in games["OppSubmissionId"]]
+        games = games[games["opp_score"] >= min_opp_score]
 
     episodes = sorted([int(x) for x in games["EpisodeId"].unique()])
 
-    for i, episode_id in enumerate(episodes, start=1):
-        print(f"converting {episode_id}: {i}/{len(episodes)}")
-        episode_path = f"{dir_}/episodes/{episode_id}.json"
-        agent_episode_path = f"{dir_}/agent_episodes/{submission_id}_{episode_id}.pkl"
+    episodes_to_convert = []
+    for episode_id in episodes:
+        episode_path = f"{EPISODES_DIR}/{episode_id}.json"
+        agent_episode_path = f"{OUTPUT_DIR}/{submission_id}_{episode_id}.npz"
 
         if not os.path.exists(episode_path) or os.path.exists(agent_episode_path):
             continue
+
+        episodes_to_convert.append(episode_id)
+
+    if num_episodes is not None:
+        episodes_to_convert = episodes_to_convert[:num_episodes]
+
+    for i, episode_id in enumerate(tqdm(episodes_to_convert), start=1):
+        print(f"converting {episode_id}: {i}/{len(episodes_to_convert)}")
+
+        episode_path = f"{EPISODES_DIR}/{episode_id}.json"
+        agent_episode_path = f"{OUTPUT_DIR}/{submission_id}_{episode_id}.npz"
 
         episode_data = json.load(open(episode_path, "r"))
         agents = episode_data["metadata"]["agents"]
@@ -75,7 +335,9 @@ def convert_episodes(submission_id):
         for team_id, agent in enumerate(agents):
             if agent["submission_id"] == submission_id:
                 agent_episode = convert_episode(episode_data, team_id)
-                pickle.dump(agent_episode, open(agent_episode_path, "wb"))
+                if not agent_episode or len(agent_episode["steps"]) == 0:
+                    continue
+                np.savez_compressed(agent_episode_path, **agent_episode)
 
 
 def convert_episode_step(episode_step, team_id):
@@ -160,140 +422,77 @@ def get_win_team_by_match(episode_data):
     return win_teams
 
 
-def estimate_hidden_constant_discovery_steps(
-    team_id, team_observations, team_actions, game_params
+def update_exploration_flags(
+    state, actions, game_params, previous_step_sap_positions, previous_step_opp_ships
 ):
-    """
-    Estimate the steps at which the agent with the given `team_id`
-    discovers certain hidden constants during the game.
 
-    Hidden constants include:
-    - nebula_energy_reduction
-    - nebula_tile_drift_speed
-    - unit_sap_dropoff_factor
-    - unit_energy_void_factor
+    if not Global.NEBULA_ENERGY_REDUCTION_FOUND:
+        # we assume that we have found a constant when the first ship enters Nebula
+        for ship in state.fleet:
+            if ship.node.type == NodeType.nebula:
+                Global.NEBULA_ENERGY_REDUCTION_FOUND = True
+                Global.NEBULA_ENERGY_REDUCTION = game_params[
+                    "nebula_tile_energy_reduction"
+                ]
+                break
 
-    Returns:
-    - A dictionary {constant name -> estimated step when the constant was discovered}
-    """
+    if not Global.UNIT_SAP_DROPOFF_FACTOR_FOUND:
+        #  we assume that we found the constant when we made the first sap that reached the opponent's ship.
 
-    inf_step = (
-        game_params["max_steps_in_match"] * (game_params["match_count_per_episode"] + 1)
-        + 1
-    )
-
-    nebula_tile_drift_speed_found_step = inf_step
-    unit_sap_dropoff_factor_found_step = inf_step
-    nebula_energy_reduction_found_step = inf_step
-    unit_energy_void_factor_found_step = inf_step
-
-    Global.clear()
-    Global.VERBOSITY = 1
-
-    Global.MAX_UNITS = game_params["max_units"]
-    Global.UNIT_MOVE_COST = game_params["unit_move_cost"]
-    Global.UNIT_SAP_COST = game_params["unit_sap_cost"]
-    Global.UNIT_SAP_RANGE = game_params["unit_sap_range"]
-    Global.UNIT_SENSOR_RANGE = game_params["unit_sensor_range"]
-
-    state = State(team_id)
-
-    previous_step_sap_positions = set()
-    previous_step_opp_ships = set()
-    for obs, actions in zip(team_observations, team_actions):
-        state.update(obs)
-        step = state.global_step
-
-        if (
-            nebula_tile_drift_speed_found_step == inf_step
-            and Global.OBSTACLE_MOVEMENT_PERIOD_FOUND
-            and Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND
-        ):
-            if (
-                abs(
-                    get_nebula_tile_drift_speed()
-                    - game_params["nebula_tile_drift_speed"]
-                )
-                > 0.001
-            ):
-                raise RuntimeError(
-                    f"nebula_tile_drift_speed is wrong, params={game_params['nebula_tile_drift_speed']}, "
-                    f"found={get_nebula_tile_drift_speed()}"
-                )
-            nebula_tile_drift_speed_found_step = step
-
-        if (
-            Global.OBSTACLE_MOVEMENT_PERIOD_FOUND
-            and Global.OBSTACLE_MOVEMENT_DIRECTION_FOUND
-            and Global.UNIT_SAP_DROPOFF_FACTOR_FOUND
-            and Global.NEBULA_ENERGY_REDUCTION_FOUND
-            and Global.UNIT_ENERGY_VOID_FACTOR_FOUND
-        ):
-            # we have found all the hidden constants
-            break
-
-        if not Global.NEBULA_ENERGY_REDUCTION_FOUND:
-            # we assume that we have found a constant when the first ship enters Nebula
-            for ship in state.fleet:
-                if ship.node.type == NodeType.nebula:
-                    Global.NEBULA_ENERGY_REDUCTION_FOUND = True
-                    Global.NEBULA_ENERGY_REDUCTION = game_params[
-                        "nebula_tile_energy_reduction"
+        for sap_position in previous_step_sap_positions:
+            for opp_uint_id in previous_step_opp_ships:
+                opp_ship = state.opp_fleet.ships[opp_uint_id]
+                if opp_ship.node is None:
+                    continue
+                distance = chebyshev_distance(opp_ship.coordinates, sap_position)
+                if distance == 1:
+                    Global.UNIT_SAP_DROPOFF_FACTOR_FOUND = True
+                    Global.UNIT_SAP_DROPOFF_FACTOR = game_params[
+                        "unit_sap_dropoff_factor"
                     ]
-                    nebula_energy_reduction_found_step = step
                     break
 
-        if not Global.UNIT_SAP_DROPOFF_FACTOR_FOUND:
-            #  we assume that we found the constant when we made the first sap that reached the opponent's ship.
+        previous_step_sap_positions.clear()
+        for ship, (action_type, dx, dy) in zip(state.fleet.ships, actions):
+            if (
+                action_type == ActionType.sap
+                and ship.node is not None
+                and ship.can_sap()
+            ):
+                previous_step_sap_positions.add((ship.node.x + dx, ship.node.y + dy))
 
-            for sap_position in previous_step_sap_positions:
-                for opp_uint_id in previous_step_opp_ships:
-                    opp_ship = state.opp_fleet.ships[opp_uint_id]
-                    if opp_ship.node is None:
-                        continue
-                    distance = chebyshev_distance(opp_ship.coordinates, sap_position)
-                    if distance == 1:
-                        Global.UNIT_SAP_DROPOFF_FACTOR_FOUND = True
-                        Global.UNIT_SAP_DROPOFF_FACTOR = game_params[
-                            "unit_sap_dropoff_factor"
-                        ]
-                        unit_sap_dropoff_factor_found_step = step
-                        break
+        previous_step_opp_ships.clear()
+        for opp_ship in state.opp_fleet:
+            if opp_ship.node is not None and opp_ship.energy > 0:
+                previous_step_opp_ships.add(opp_ship.unit_id)
 
-            previous_step_sap_positions = set()
-            for ship, (action_type, dx, dy) in zip(state.fleet.ships, actions):
-                if (
-                    action_type == ActionType.sap
-                    and ship.node is not None
-                    and ship.can_sap()
-                ):
-                    previous_step_sap_positions.add(
-                        (ship.node.x + dx, ship.node.y + dy)
-                    )
+    if not Global.UNIT_ENERGY_VOID_FACTOR_FOUND:
+        # we assume that we have found a constant when our ships are next to an enemy ship for the first time.
+        for opp_ship in state.opp_fleet:
+            for our_ship in state.fleet:
+                distance = manhattan_distance(
+                    opp_ship.coordinates, our_ship.coordinates
+                )
+                if distance == 1:
+                    Global.UNIT_ENERGY_VOID_FACTOR_FOUND = True
+                    Global.UNIT_ENERGY_VOID_FACTOR = game_params[
+                        "unit_energy_void_factor"
+                    ]
+                    break
 
-            previous_step_opp_ships = set()
-            for opp_ship in state.opp_fleet:
-                if opp_ship.node is not None and opp_ship.energy > 0:
-                    previous_step_opp_ships.add(opp_ship.unit_id)
 
-        if not Global.UNIT_ENERGY_VOID_FACTOR_FOUND:
-            # we assume that we have found a constant when our ships are next to an enemy ship for the first time.
-            for opp_ship in state.opp_fleet:
-                for our_ship in state.fleet:
-                    dinstance = manhattan_distance(
-                        opp_ship.coordinates, our_ship.coordinates
-                    )
-                    if dinstance == 1:
-                        Global.UNIT_ENERGY_VOID_FACTOR_FOUND = True
-                        Global.UNIT_ENERGY_VOID_FACTOR = game_params[
-                            "unit_energy_void_factor"
-                        ]
-                        unit_energy_void_factor_found_step = step
-                        break
+@dataclass
+class Args:
+    # submission to convert
+    submission_id: int
 
-    return {
-        "nebula_energy_reduction": nebula_energy_reduction_found_step,
-        "nebula_tile_drift_speed": nebula_tile_drift_speed_found_step,
-        "unit_sap_dropoff_factor": unit_sap_dropoff_factor_found_step,
-        "unit_energy_void_factor": unit_energy_void_factor_found_step,
-    }
+    # number of episodes to convert
+    num_episodes: Optional[int] = None
+
+    # minimum score for an opponent
+    min_score: Optional[int] = None
+
+
+if __name__ == "__main__":
+    args = tyro.cli(Args)
+    convert_episodes(args.submission_id, args.num_episodes, args.min_score)
