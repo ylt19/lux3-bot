@@ -4,17 +4,18 @@ import tyro
 import requests
 import pandas as pd
 from typing import Optional
+from pathlib import Path
 from dataclasses import dataclass
-from collections import defaultdict
 
 BASE_URL = "https://www.kaggle.com/api/i/competitions.EpisodeService/"
 GET_URL = BASE_URL + "GetEpisodeReplay"
-OUTPUT_DIR = "episodes"
+WORKING_FOLDER = Path(__file__).parent
+OUTPUT_DIR = f"{WORKING_FOLDER}/episodes"
 
 
 def get_submissions_ids(episode_id, games_df=None):
     if games_df is None:
-        games_df = pd.read_csv("games.csv")
+        games_df = pd.read_csv(f"{WORKING_FOLDER}/games.csv")
     df = games_df[games_df["EpisodeId"] == episode_id].sort_values(
         "Index", ascending=True
     )
@@ -22,13 +23,13 @@ def get_submissions_ids(episode_id, games_df=None):
 
 
 def update_submissions_names(submission_to_name):
-    df = pd.read_csv("submissions.csv")
+    df = pd.read_csv(f"{WORKING_FOLDER}/submissions.csv")
     names = []
     for submission_id, name in zip(df["submission_id"], df["name"]):
         name = submission_to_name.get(submission_id, name)
         names.append(name)
     df["name"] = names
-    df.to_csv("submissions.csv", index=False)
+    df.to_csv(f"{WORKING_FOLDER}/submissions.csv", index=False)
 
 
 def get_actions(keggle_replay):
@@ -123,10 +124,10 @@ def get_episodes(submission_id, num_episodes=1000, min_score=None):
     if not os.path.exists(OUTPUT_DIR):
         os.mkdir(OUTPUT_DIR)
 
-    games = pd.read_csv("games.csv")
+    games = pd.read_csv(f"{WORKING_FOLDER}/games.csv")
 
     if min_score is not None:
-        submissions = pd.read_csv("submissions.csv")
+        submissions = pd.read_csv(f"{WORKING_FOLDER}/submissions.csv")
         sid_id_to_score = dict(zip(submissions["submission_id"], submissions["score"]))
         opp_scores = [sid_id_to_score[x] for x in games["OppSubmissionId"]]
         games["opp_score"] = opp_scores
@@ -150,8 +151,13 @@ def get_episodes(submission_id, num_episodes=1000, min_score=None):
 
 @dataclass
 class Args:
+    # submission to download
     submission_id: int
+
+    # number of episodes to download
     num_episodes: Optional[int] = 1000
+
+    # minimum score for an opponent
     min_score: Optional[int] = None
 
 
