@@ -11,11 +11,13 @@ BASE_URL = "https://www.kaggle.com/api/i/competitions.EpisodeService/"
 GET_URL = BASE_URL + "GetEpisodeReplay"
 WORKING_FOLDER = Path(__file__).parent
 OUTPUT_DIR = f"{WORKING_FOLDER}/episodes"
+SUBMISSIONS_PATH = f"{WORKING_FOLDER}/submissions.csv"
+GAMES_PATH = f"{WORKING_FOLDER}/games.csv"
 
 
 def get_submissions_ids(episode_id, games_df=None):
     if games_df is None:
-        games_df = pd.read_csv(f"{WORKING_FOLDER}/games.csv")
+        games_df = pd.read_csv(GAMES_PATH)
     df = games_df[games_df["EpisodeId"] == episode_id].sort_values(
         "Index", ascending=True
     )
@@ -23,13 +25,13 @@ def get_submissions_ids(episode_id, games_df=None):
 
 
 def update_submissions_names(submission_to_name):
-    df = pd.read_csv(f"{WORKING_FOLDER}/submissions.csv")
+    df = pd.read_csv(SUBMISSIONS_PATH)
     names = []
     for submission_id, name in zip(df["submission_id"], df["name"]):
         name = submission_to_name.get(submission_id, name)
         names.append(name)
     df["name"] = names
-    df.to_csv(f"{WORKING_FOLDER}/submissions.csv", index=False)
+    df.to_csv(SUBMISSIONS_PATH, index=False)
 
 
 def get_actions(keggle_replay):
@@ -124,10 +126,10 @@ def get_episodes(submission_id, num_episodes=1000, min_score=None):
     if not os.path.exists(OUTPUT_DIR):
         os.mkdir(OUTPUT_DIR)
 
-    games = pd.read_csv(f"{WORKING_FOLDER}/games.csv")
+    games = pd.read_csv(GAMES_PATH)
 
     if min_score is not None:
-        submissions = pd.read_csv(f"{WORKING_FOLDER}/submissions.csv")
+        submissions = pd.read_csv(SUBMISSIONS_PATH)
         sid_id_to_score = dict(zip(submissions["submission_id"], submissions["score"]))
         opp_scores = [sid_id_to_score[x] for x in games["OppSubmissionId"]]
         games["opp_score"] = opp_scores
