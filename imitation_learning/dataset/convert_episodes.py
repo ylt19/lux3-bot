@@ -250,9 +250,12 @@ def pars_obs(state, team_actions):
 def filter_actions(state, team_actions):
     asteroids = state.field.asteroid
 
+    default_action = [ActionType.center, 0, 0]
+
     filtered_actions = []
     for ship, (action_type, sap_dx, sap_dy) in zip(state.fleet.ships, team_actions):
         if ship.node is None:
+            filtered_actions.append(default_action)
             continue
 
         action_type = ActionType(action_type)
@@ -265,7 +268,7 @@ def filter_actions(state, team_actions):
                 f"Wrong action, out of grid: "
                 f"step={state.global_step}, ship={ship}, action={action_type}"
             )
-            filtered_actions.append([ActionType.center, 0, 0])
+            filtered_actions.append(default_action)
             continue
 
         if dx != 0 or dy != 0:
@@ -274,7 +277,7 @@ def filter_actions(state, team_actions):
                     f"Wrong action, not enough energy to move: "
                     f"step={state.global_step}, ship={ship}, action={action_type}"
                 )
-                filtered_actions.append([ActionType.center, 0, 0])
+                filtered_actions.append(default_action)
                 continue
 
             if asteroids[next_y, next_x]:
@@ -282,7 +285,7 @@ def filter_actions(state, team_actions):
                     f"Wrong action, path is blocked: "
                     f"step={state.global_step}, ship={ship}, action={action_type}"
                 )
-                filtered_actions.append([ActionType.center, 0, 0])
+                filtered_actions.append(default_action)
                 continue
 
         if action_type == ActionType.sap:
@@ -291,7 +294,7 @@ def filter_actions(state, team_actions):
                     f"Wrong action, not enough energy to sap: "
                     f"step={state.global_step}, ship={ship}, action={action_type}"
                 )
-                filtered_actions.append([ActionType.center, 0, 0])
+                filtered_actions.append(default_action)
                 continue
 
             sap_x = ship.node.x + sap_dx
@@ -301,7 +304,7 @@ def filter_actions(state, team_actions):
                     f"Wrong action, sap out of grid: "
                     f"step={state.global_step}, ship={ship}, action={action_type}"
                 )
-                filtered_actions.append([ActionType.center, 0, 0])
+                filtered_actions.append(default_action)
                 continue
 
             if sap_dx > Global.UNIT_SAP_RANGE or sap_dy > Global.UNIT_SAP_RANGE:
@@ -309,7 +312,7 @@ def filter_actions(state, team_actions):
                     f"Wrong action, sap out of range: "
                     f"step={state.global_step}, ship={ship}, action={action_type}"
                 )
-                filtered_actions.append([ActionType.center, 0, 0])
+                filtered_actions.append(default_action)
                 continue
 
         filtered_actions.append([action_type, 0, 0])
@@ -362,6 +365,7 @@ def apply_actions(state, team_action):
 
 
 def convert_episodes(submission_id, num_episodes=None, min_opp_score=None):
+    random.seed(42)
 
     if not os.path.exists(OUTPUT_DIR):
         os.mkdir(OUTPUT_DIR)
