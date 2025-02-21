@@ -337,7 +337,7 @@ def convert_episodes(submission_id, num_episodes=None, min_opp_score=None):
                 agent_episode = convert_episode(episode_data, team_id)
                 if not agent_episode or len(agent_episode["steps"]) == 0:
                     continue
-                np.savez_compressed(agent_episode_path, **agent_episode)
+                np.savez(agent_episode_path, **agent_episode)
 
 
 def convert_episode_step(episode_step, team_id):
