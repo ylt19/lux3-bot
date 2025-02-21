@@ -18,6 +18,7 @@ sys.path.append(str(BOT_DIR))
 from agent.path import Action, ActionType
 from agent.base import (
     Global,
+    is_inside,
     SPACE_SIZE,
     transpose,
     get_opposite,
@@ -65,6 +66,8 @@ def convert_episode(episode_data, team_id):
         team_actions = episode_actions[f"player_{team_id}"]
 
         state.update(team_observation)
+
+        team_actions = filter_actions(state, team_actions)
 
         # print(f"start step {state.global_step}")
 
@@ -242,6 +245,76 @@ def pars_obs(state, team_actions):
                     actions[position] = action_type
 
     return d, actions
+
+
+def filter_actions(state, team_actions):
+    asteroids = state.field.asteroid
+
+    filtered_actions = []
+    for ship, (action_type, sap_dx, sap_dy) in zip(state.fleet.ships, team_actions):
+        if ship.node is None:
+            continue
+
+        action_type = ActionType(action_type)
+        dx, dy = action_type.to_direction()
+
+        next_x = ship.node.x + dx
+        next_y = ship.node.y + dy
+        if not is_inside(next_x, next_y):
+            print(
+                f"Wrong action, out of grid: "
+                f"step={state.global_step}, ship={ship}, action={action_type}"
+            )
+            filtered_actions.append([ActionType.center, 0, 0])
+            continue
+
+        if dx != 0 or dy != 0:
+            if ship.energy < Global.UNIT_MOVE_COST:
+                print(
+                    f"Wrong action, not enough energy to move: "
+                    f"step={state.global_step}, ship={ship}, action={action_type}"
+                )
+                filtered_actions.append([ActionType.center, 0, 0])
+                continue
+
+            if asteroids[next_y, next_x]:
+                print(
+                    f"Wrong action, path is blocked: "
+                    f"step={state.global_step}, ship={ship}, action={action_type}"
+                )
+                filtered_actions.append([ActionType.center, 0, 0])
+                continue
+
+        if action_type == ActionType.sap:
+            if ship.energy < Global.UNIT_SAP_COST:
+                print(
+                    f"Wrong action, not enough energy to sap: "
+                    f"step={state.global_step}, ship={ship}, action={action_type}"
+                )
+                filtered_actions.append([ActionType.center, 0, 0])
+                continue
+
+            sap_x = ship.node.x + sap_dx
+            sap_y = ship.node.y + sap_dy
+            if not is_inside(sap_x, sap_y):
+                print(
+                    f"Wrong action, sap out of grid: "
+                    f"step={state.global_step}, ship={ship}, action={action_type}"
+                )
+                filtered_actions.append([ActionType.center, 0, 0])
+                continue
+
+            if sap_dx > Global.UNIT_SAP_RANGE or sap_dy > Global.UNIT_SAP_RANGE:
+                print(
+                    f"Wrong action, sap out of range: "
+                    f"step={state.global_step}, ship={ship}, action={action_type}"
+                )
+                filtered_actions.append([ActionType.center, 0, 0])
+                continue
+
+        filtered_actions.append([action_type, 0, 0])
+
+    return filtered_actions
 
 
 def fill_sap_array(
