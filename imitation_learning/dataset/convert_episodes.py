@@ -6,10 +6,10 @@ import tyro
 import random
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 from typing import Optional
 from pathlib import Path
 from dataclasses import dataclass
+from tqdm.contrib.concurrent import process_map
 
 WORKING_FOLDER = Path(__file__).parent
 BOT_DIR = WORKING_FOLDER.parent.parent
@@ -99,7 +99,7 @@ def convert_episode(episode_data, team_id):
         obs_array[4:8] = previous_step_unit_array
         previous_step_unit_array = obs_array[:4].copy()
 
-        obs_array[8] = previous_step_sap_array
+        obs_array[8] = previous_step_sap_array.copy()
         unit_sap_dropoff_factor = (
             game_params["unit_sap_dropoff_factor"]
             if Global.UNIT_SAP_DROPOFF_FACTOR_FOUND
@@ -315,7 +315,10 @@ def filter_actions(state, team_actions):
                 filtered_actions.append(default_action)
                 continue
 
-        filtered_actions.append([action_type, 0, 0])
+        if action_type != ActionType.sap:
+            filtered_actions.append([action_type, 0, 0])
+        else:
+            filtered_actions.append([action_type, sap_dx, sap_dy])
 
     return filtered_actions
 
@@ -364,7 +367,9 @@ def apply_actions(state, team_action):
     return position_to_action
 
 
-def convert_episodes(submission_id, num_episodes=None, min_opp_score=None):
+def convert_episodes(
+    submission_id, num_episodes=None, min_opp_score=None, num_workers=1
+):
     random.seed(42)
 
     if not os.path.exists(OUTPUT_DIR):
@@ -400,21 +405,33 @@ def convert_episodes(submission_id, num_episodes=None, min_opp_score=None):
     if num_episodes is not None:
         episodes_to_convert = episodes_to_convert[:num_episodes]
 
-    for i, episode_id in enumerate(tqdm(episodes_to_convert), start=1):
-        print(f"converting {episode_id}: {i}/{len(episodes_to_convert)}")
+    if num_workers <= 1:
+        for i, episode_id in enumerate(episodes_to_convert, start=1):
+            print(f"converting {episode_id}: {i}/{len(episodes_to_convert)}")
+            convert_and_save(submission_id, episode_id)
+    else:
+        submission_ids = [submission_id for _ in episodes_to_convert]
+        process_map(
+            convert_and_save,
+            submission_ids,
+            episodes_to_convert,
+            max_workers=num_workers,
+        )
 
-        episode_path = f"{EPISODES_DIR}/{episode_id}.json"
-        agent_episode_path = f"{OUTPUT_DIR}/{submission_id}_{episode_id}.npz"
 
-        episode_data = json.load(open(episode_path, "r"))
-        agents = episode_data["metadata"]["agents"]
+def convert_and_save(submission_id, episode_id):
+    episode_path = f"{EPISODES_DIR}/{episode_id}.json"
+    agent_episode_path = f"{OUTPUT_DIR}/{submission_id}_{episode_id}.npz"
 
-        for team_id, agent in enumerate(agents):
-            if agent["submission_id"] == submission_id:
-                agent_episode = convert_episode(episode_data, team_id)
-                if not agent_episode or len(agent_episode["steps"]) == 0:
-                    continue
-                np.savez(agent_episode_path, **agent_episode)
+    episode_data = json.load(open(episode_path, "r"))
+    agents = episode_data["metadata"]["agents"]
+
+    for team_id, agent in enumerate(agents):
+        if agent["submission_id"] == submission_id:
+            agent_episode = convert_episode(episode_data, team_id)
+            if not agent_episode or len(agent_episode["steps"]) == 0:
+                continue
+            np.savez(agent_episode_path, **agent_episode)
 
 
 def convert_episode_step(episode_step, team_id):
@@ -569,7 +586,11 @@ class Args:
     # minimum score for an opponent
     min_score: Optional[int] = None
 
+    num_workers: int = 1
+
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    convert_episodes(args.submission_id, args.num_episodes, args.min_score)
+    convert_episodes(
+        args.submission_id, args.num_episodes, args.min_score, args.num_workers
+    )
