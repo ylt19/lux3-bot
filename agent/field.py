@@ -1,6 +1,7 @@
 import numpy as np
 from functools import cached_property
 from collections import defaultdict
+
 from pathfinding import Grid, ResumableDijkstra
 from scipy.signal import convolve2d
 
@@ -36,6 +37,10 @@ class Field:
             self.energy_gain,
             self.last_relic_check,
             self.last_step_in_vision,
+            self.need_to_explore_for_relic,
+            self.need_to_explore_for_reward,
+            self.unknown_energy,
+            self.unknown_nodes,
         ) = self._create_space_fields()
 
         self.last_time_seen = self._get_last_time_seen_field(previous_field)
@@ -52,6 +57,12 @@ class Field:
         energy_gain_field = create_empty_field()
         last_relic_check = create_empty_field()
         last_step_in_vision = create_empty_field()
+        need_to_explore_for_relic = create_empty_field()
+        need_to_explore_for_relic[:] = 1
+        need_to_explore_for_reward = create_empty_field()
+        need_to_explore_for_reward[:] = 1
+        unknown_energy = create_empty_field()
+        unknown_nodes = create_empty_field()
         for node in self.space:
             x, y = node.coordinates
             if node.type == NodeType.asteroid:
@@ -63,6 +74,15 @@ class Field:
             energy_gain_field[y, x] = node.energy_gain
             last_relic_check[y, x] = node.last_relic_check
             last_step_in_vision[y, x] = node.last_step_in_vision
+            if node.explored_for_relic:
+                need_to_explore_for_relic[y, x] = 0
+            if node.explored_for_reward:
+                need_to_explore_for_reward[y, x] = 0
+            if node.energy is None:
+                unknown_energy[y, x] = 1
+            if node.is_unknown:
+                unknown_nodes[y, x] = 1
+
         return (
             asteroid_field,
             nebulae_field,
@@ -70,6 +90,10 @@ class Field:
             energy_gain_field,
             last_relic_check,
             last_step_in_vision,
+            need_to_explore_for_relic,
+            need_to_explore_for_reward,
+            unknown_energy,
+            unknown_nodes,
         )
 
     @cached_property
