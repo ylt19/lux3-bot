@@ -1,360 +1,79 @@
 import os
-import glob
-import json
 import time
 import torch
 import random
-import pickle
 import numpy as np
 import pandas as pd
 from torch import nn
 from tqdm import tqdm
-from enum import IntEnum
-from collections import defaultdict
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
-from scipy.signal import convolve2d
-from sklearn.model_selection import train_test_split
-from matplotlib.pyplot import imshow
 
-from agent.base import (
-    Global,
-    SPACE_SIZE,
-    transpose,
-    get_opposite,
-    get_nebula_tile_drift_speed,
-    manhattan_distance,
-    nearby_positions,
-    clip_int,
-)
-from agent.path import Action, ActionType
-from agent.state import State
+from agent.base import SPACE_SIZE, transpose
 
 
 EPISODES_DIR = "dataset/episodes"
 AGENT_EPISODES_DIR = "dataset/agent_episodes"
 MODEL_NAME = "sap_unet"
 
-N_CHANNELS = 20
+N_CHANNELS = 21
 N_GLOBAL = 16
 N_CLASSES = 1
 
-GF_INFO = [
-    {"name": "nebula_tile_drift_direction", "m": 1},
-    {"name": "nebula_tile_energy_reduction", "m": Global.MAX_UNIT_ENERGY},
-    {"name": "unit_move_cost", "m": Global.MAX_UNIT_ENERGY},
-    {"name": "unit_sap_cost", "m": Global.MAX_UNIT_ENERGY},
-    {"name": "unit_sap_range", "m": Global.SPACE_SIZE},
-    {"name": "unit_sap_dropoff_factor", "m": 1},
-    {"name": "unit_energy_void_factor", "m": 1},
-    {"name": "match_step", "m": Global.MAX_STEPS_IN_MATCH},
-    {"name": "match_number", "m": Global.NUM_MATCHES_IN_GAME},
-    {"name": "num_steps_before_obstacle_movement", "m": Global.MAX_STEPS_IN_MATCH},
-    {"name": "my_points", "m": 1000},
-    {"name": "opp_points", "m": 1000},
-    {"name": "my_reward", "m": 1000},
-    {"name": "opp_reward", "m": 1000},
-    {"name": "num_relics_found", "m": 3},
-    {"name": "unit_energy", "m": Global.MAX_UNIT_ENERGY},
-]
+
+def seed_everything(seed_value):
+    random.seed(seed_value)
+    np.random.seed(seed_value)
+    torch.manual_seed(seed_value)
+    os.environ["PYTHONHASHSEED"] = str(seed_value)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed_value)
+        torch.cuda.manual_seed_all(seed_value)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = True
 
 
-def find_episodes(submission_ids, min_opp_score):
+def select_episodes(submission_ids, min_opp_score, val_ratio=0.1):
+    seed_everything(42)
+
     submissions_df = pd.read_csv("dataset/submissions.csv")
-    sid_id_to_score = dict(
-        zip(submissions_df["submission_id"], submissions_df["score"])
-    )
+    sid_to_score = dict(zip(submissions_df["submission_id"], submissions_df["score"]))
 
     games_df = pd.read_csv("dataset/games.csv")
-    games_df["opp_score"] = [sid_id_to_score[x] for x in games_df["OppSubmissionId"]]
+    games_df["opp_score"] = [sid_to_score[x] for x in games_df["OppSubmissionId"]]
     games_df = games_df[
         games_df["SubmissionId"].isin(submission_ids)
         & (games_df["opp_score"] >= min_opp_score)
     ]
 
-    episodes = []
+    episodes = set()
     for sid, episode_id in zip(games_df["SubmissionId"], games_df["EpisodeId"]):
-        path = f"{AGENT_EPISODES_DIR}/{sid}_{episode_id}.pkl"
-        if os.path.exists(path) and path not in episodes:
-            episodes.append(path)
+        path = f"{AGENT_EPISODES_DIR}/{sid}_{episode_id}.npz"
+        if os.path.exists(path):
+            train_data = np.load(path)
+            num_steps = len(train_data["steps"])
+            episodes.add((sid, episode_id, num_steps))
 
-    return episodes
+    episodes = sorted(episodes, key=lambda x: x[1])
+    print(f"total number of episodes: {len(episodes)}")
 
+    random.shuffle(episodes)
+    num_train = int(len(episodes) * (1 - val_ratio))
 
-def create_dataset_from_pickle(episodes):
-    obses = []
-    for path in tqdm(episodes):
-        obses += pars_agent_episode(pickle.load(open(path, "rb")))
-    return obses
+    train_episode_steps, val_episode_steps = [], []
+    for i, (sid, episode_id, num_steps) in enumerate(episodes):
+        episode_steps = [(sid, episode_id, s) for s in range(num_steps)]
 
+        if i <= num_train:
+            train_episode_steps += episode_steps
+        else:
+            val_episode_steps += episode_steps
 
-def pars_agent_episode(agent_episode):
-    episode_id = agent_episode["episode_id"]
-    team_id = agent_episode["team_id"]
-    wins = agent_episode["wins"]
-    if not any(wins):
-        return []
+    print(f"train size: {len(train_episode_steps)}")
+    print(f"val size: {len(val_episode_steps)}")
 
-    # print(f"start parsing episode {episode_id} team {team_id}")
-
-    Global.clear()
-    Global.VERBOSITY = 1
-
-    data = []
-
-    game_params = agent_episode["params"]
-    Global.MAX_UNITS = game_params["max_units"]
-    Global.UNIT_MOVE_COST = game_params["unit_move_cost"]
-    Global.UNIT_SAP_COST = game_params["unit_sap_cost"]
-    Global.UNIT_SAP_RANGE = game_params["unit_sap_range"]
-    Global.UNIT_SENSOR_RANGE = game_params["unit_sensor_range"]
-
-    r = Global.UNIT_SAP_RANGE * 2 + 1
-    sap_kernel = np.ones((r, r), dtype=np.int32)
-
-    exploration_flags = agent_episode["exploration_flags"]
-
-    state = State(team_id)
-    previous_step_unit_array = np.zeros((4, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
-    previous_step_sap_array = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
-    for team_observation, team_actions in zip(
-        agent_episode["observations"], agent_episode["actions"]
-    ):
-        state.update(team_observation)
-
-        step = state.global_step
-        match_step = state.match_step
-        match_number = state.match_number
-        # print(f"start step {step}, episode_id {episode_id}, team {team_id}")
-
-        if match_step == 0:
-            previous_step_unit_array[:] = 0
-            previous_step_sap_array[:] = 0
-            continue
-
-        if any(
-            num_wins > Global.NUM_MATCHES_IN_GAME / 2
-            for num_wins in team_observation["team_wins"]
-        ):
-            break
-
-        is_win = wins[match_number]
-
-        if not is_win:
-            continue
-
-        nebula_tile_energy_reduction_ = (
-            game_params["nebula_tile_energy_reduction"]
-            if step >= exploration_flags["nebula_energy_reduction"]
-            else 0
-        )
-        obs_array, saps = pars_obs(state, team_actions, nebula_tile_energy_reduction_)
-
-        obs_array[6:10] = previous_step_unit_array
-        previous_step_unit_array = obs_array[:4].copy()
-
-        obs_array[10] = previous_step_sap_array
-        unit_sap_dropoff_factor = (
-            game_params["unit_sap_dropoff_factor"]
-            if step >= exploration_flags["unit_sap_dropoff_factor"]
-            else 0.5
-        )
-        fill_sap_array(
-            state, team_actions, previous_step_sap_array, unit_sap_dropoff_factor
-        )
-
-        if saps:
-
-            if team_id == 1:
-                obs_array = transpose(obs_array, reflective=True)
-                flipped_saps = []
-                for sap in saps:
-                    flipped_saps.append(
-                        {
-                            "unit_position": get_opposite(*sap["unit_position"]),
-                            "unit_energy": sap["unit_energy"],
-                            "sap_position": get_opposite(*sap["sap_position"]),
-                        }
-                    )
-                saps = flipped_saps
-
-        for sap in saps:
-
-            obs_array_coppy = np.array(obs_array)
-
-            unit_x, unit_y = sap["unit_position"]
-            ship_arr = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int32)
-            ship_arr[unit_y, unit_x] = 1
-            ship_arr = convolve2d(
-                ship_arr,
-                sap_kernel,
-                mode="same",
-                boundary="fill",
-                fillvalue=0,
-            )
-            obs_array_coppy[19] = ship_arr
-
-            if Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
-                nebula_tile_drift_direction = (
-                    1 if get_nebula_tile_drift_speed() > 0 else -1
-                )
-                num_steps_before_obstacle_movement = (
-                    state.num_steps_before_obstacle_movement()
-                )
-            else:
-                nebula_tile_drift_direction = 0
-                num_steps_before_obstacle_movement = -Global.MAX_STEPS_IN_MATCH
-
-            gf = (
-                nebula_tile_drift_direction,
-                (
-                    game_params["nebula_tile_energy_reduction"] / Global.MAX_UNIT_ENERGY
-                    if step >= exploration_flags["nebula_energy_reduction"]
-                    else -1
-                ),
-                Global.UNIT_MOVE_COST / Global.MAX_UNIT_ENERGY,
-                Global.UNIT_SAP_COST / Global.MAX_UNIT_ENERGY,
-                Global.UNIT_SAP_RANGE / Global.SPACE_SIZE,
-                (
-                    game_params["unit_sap_dropoff_factor"]
-                    if step >= exploration_flags["unit_sap_dropoff_factor"]
-                    else -1
-                ),
-                (
-                    game_params["unit_energy_void_factor"]
-                    if step >= exploration_flags["unit_energy_void_factor"]
-                    else -1
-                ),
-                match_step / Global.MAX_STEPS_IN_MATCH,
-                match_number / Global.NUM_MATCHES_IN_GAME,
-                num_steps_before_obstacle_movement / Global.MAX_STEPS_IN_MATCH,
-                state.fleet.points / 1000,
-                state.opp_fleet.points / 1000,
-                state.fleet.reward / 1000,
-                state.opp_fleet.reward / 1000,
-                sum(Global.RELIC_RESULTS) / 3,
-                sap["unit_energy"] / Global.MAX_UNIT_ENERGY,
-            )
-
-            d = {
-                "state": obs_array_coppy,
-                "sap_position": sap["sap_position"],
-                "step": step,
-                "episode_id": episode_id,
-                "team_id": team_id,
-                "gf": gf,
-            }
-
-            data.append(d)
-
-    return data
-
-
-def fill_sap_array(
-    state, team_actions, previous_step_sap_array, unit_sap_dropoff_factor
-):
-    previous_step_sap_array[:] = 0
-    for ship, (action_type, dx, dy) in zip(state.fleet.ships, team_actions):
-        if action_type == ActionType.sap and ship.node is not None and ship.can_sap():
-            sap_x = ship.node.x + dx
-            sap_y = ship.node.y + dy
-            for x, y in nearby_positions(sap_x, sap_y, 1):
-                if x == sap_x and y == sap_y:
-                    previous_step_sap_array[y, x] += (
-                        Global.UNIT_SAP_COST / Global.MAX_UNIT_ENERGY
-                    )
-                else:
-                    previous_step_sap_array[y, x] += (
-                        Global.UNIT_SAP_COST
-                        / Global.MAX_UNIT_ENERGY
-                        * unit_sap_dropoff_factor
-                    )
-
-
-def pars_obs(state, team_actions, nebula_tile_energy_reduction):
-    d = np.zeros((20, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
-    saps = []
-
-    energy_field = state.field.energy
-    nebulae_field = state.field.nebulae
-
-    # 0 - unit positions
-    # 1 - unit energy
-    # 2 - unit next positions
-    # 3 - unit next energy
-    for ship, action in zip(state.fleet.ships, team_actions):
-        if (
-            ship.node is not None
-            and ship.energy >= 0
-            and ship.steps_since_last_seen == 0
-        ):
-            x, y = ship.coordinates
-            d[0, y, x] += 1
-            d[1, y, x] += ship.energy
-
-            action_type, sap_dx, sap_dy = action
-            action_type = ActionType(action_type)
-            if action_type == ActionType.sap:
-                saps.append(
-                    {
-                        "unit_position": (x, y),
-                        "unit_energy": ship.energy,
-                        "sap_position": (x + sap_dx, y + sap_dy),
-                    }
-                )
-
-            dx, dy = action_type.to_direction()
-
-            next_x = clip_int(x + dx)
-            next_y = clip_int(y + dy)
-
-            # if state.global_step == 75:
-            #     print(ship, action_type, next_x, next_y)
-
-            next_energy = ship.energy + energy_field[next_y, next_x]
-            if action_type == ActionType.sap:
-                next_energy -= Global.UNIT_SAP_COST
-            elif action_type != ActionType.center:
-                next_energy -= Global.UNIT_MOVE_COST
-
-            if nebulae_field[next_y, next_x]:
-                next_energy -= nebula_tile_energy_reduction
-
-            d[2, next_y, next_x] += 1
-            d[3, next_y, next_x] += next_energy
-
-    # 4 - opp unit position
-    # 5 - opp unit energy
-    for unit in state.opp_fleet:
-        if unit.energy >= 0:
-            x, y = unit.coordinates
-            d[4, y, x] += 1
-            d[5, y, x] += unit.energy
-
-    d[0] /= 10
-    d[1] /= Global.MAX_UNIT_ENERGY
-    d[2] /= 10
-    d[3] /= Global.MAX_UNIT_ENERGY
-    d[4] /= 10
-    d[5] /= Global.MAX_UNIT_ENERGY
-
-    # 6 - previous step unit positions
-    # 7 - previous step unit energy
-    # 8 - previous step opp unit positions
-    # 9 - previous step opp unit energy
-    # 10 - previous step sap array
-
-    f = state.field
-    d[11] = f.vision
-    d[12] = f.energy / Global.MAX_UNIT_ENERGY
-    d[13] = f.asteroid
-    d[14] = f.nebulae
-    d[15] = f.relic
-    d[16] = f.reward
-    d[17] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
-    d[18] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
-
-    return d, saps
+    return train_episode_steps, val_episode_steps
 
 
 # ===================#
@@ -364,32 +83,40 @@ def pars_obs(state, team_actions, nebula_tile_energy_reduction):
 
 class LuxDataset(Dataset):
 
-    def __init__(self, obses):
-        self.obses = obses
+    def __init__(self, episode_steps, aug=True):
+        self.episode_steps = episode_steps
+        self.aug = aug
 
     def __len__(self):
-        return len(self.obses)
+        return len(self.episode_steps)
 
     def __getitem__(self, idx):
-        obs = self.obses[idx]
+        sid, episode_id, step = self.episode_steps[idx]
 
-        state = obs["state"]
+        path = f"{AGENT_EPISODES_DIR}/{sid}_{episode_id}.npz"
+        data = np.load(path)
 
-        aug = random.random() > 0.5
+        state = data["states"][step]
+        gf_values = data["gfs"][step]
+        sap_position = data["actions"][step]
+
+        if self.aug:
+            aug = random.random() > 0.5
+        else:
+            aug = False
+
+        gf = np.zeros((len(gf_values), 3, 3), dtype=np.float32)
+        for i, x in enumerate(gf_values):
+            gf[i] = x
 
         label = np.zeros((1, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
-        sap_x, sap_y = obs["sap_position"]
+        sap_x, sap_y = sap_position
         label[0, sap_y, sap_x] = 1
+
         if aug:
             state = transpose(state)
             label = transpose(label)
-
-        gf = np.zeros((len(GF_INFO), 3, 3), dtype=np.float32)
-
-        for i, (val, gf_info) in enumerate(zip(obs["gf"], GF_INFO)):
-            gf[i] = val
-            if aug and gf_info["name"] == "nebula_tile_drift_speed":
-                gf[i] = -val
+            gf[0] *= -1  # nebula_tile_drift_direction
 
         return state, gf, label
 
@@ -522,19 +249,6 @@ class UNet(nn.Module):
 criterion = nn.BCEWithLogitsLoss()
 
 
-def seed_everything(seed_value):
-    random.seed(seed_value)
-    np.random.seed(seed_value)
-    torch.manual_seed(seed_value)
-    os.environ["PYTHONHASHSEED"] = str(seed_value)
-
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed_value)
-        torch.cuda.manual_seed_all(seed_value)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = True
-
-
 def get_loss(policy, label):
     loss = criterion(policy, label)
     return loss
@@ -624,20 +338,28 @@ def train_model(
             best_loss = epoch_loss
 
 
-def train(data, model_name="model", num_epochs=5, batch_size=64):
+def train(
+    train_episode_steps,
+    val_episode_steps,
+    model_name="model",
+    num_epochs=5,
+    batch_size=64,
+):
     seed_everything(42)
 
     model = UNet()  # torch.jit.load(f'{model_name}.pth')
 
-    train, val = train_test_split(data, test_size=0.1, random_state=42)
     train_loader = DataLoader(
-        LuxDataset(train),
+        LuxDataset(train_episode_steps),
         batch_size=batch_size,
         shuffle=True,
-        num_workers=0,
+        num_workers=6,
     )
     val_loader = DataLoader(
-        LuxDataset(val), batch_size=batch_size, shuffle=False, num_workers=0
+        LuxDataset(val_episode_steps),
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4,
     )
     dataloaders_dict = {"train": train_loader, "val": val_loader}
 
@@ -656,6 +378,13 @@ def train(data, model_name="model", num_epochs=5, batch_size=64):
 
 
 def main(submission_ids, min_opp_score):
-    episodes = find_episodes(submission_ids, min_opp_score)
-    data = create_dataset_from_pickle(episodes)
-    train(data, model_name=MODEL_NAME, num_epochs=15, batch_size=128)
+    train_episode_steps, val_episode_steps = select_episodes(
+        submission_ids, min_opp_score
+    )
+    train(
+        train_episode_steps,
+        val_episode_steps,
+        model_name=MODEL_NAME,
+        num_epochs=15,
+        batch_size=128,
+    )

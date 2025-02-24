@@ -9,6 +9,7 @@ import pandas as pd
 from typing import Optional
 from pathlib import Path
 from dataclasses import dataclass
+from scipy.signal import convolve2d
 from tqdm.contrib.concurrent import process_map
 
 WORKING_FOLDER = Path(__file__).parent
@@ -18,6 +19,7 @@ sys.path.append(str(BOT_DIR))
 from agent.path import Action, ActionType
 from agent.base import (
     Global,
+    clip_int,
     is_inside,
     SPACE_SIZE,
     transpose,
@@ -32,6 +34,7 @@ from agent.state import State
 
 EPISODES_DIR = f"{WORKING_FOLDER}/episodes"
 OUTPUT_DIR = f"{WORKING_FOLDER}/agent_episodes"
+OUTPUT_DIR_SAP = f"{WORKING_FOLDER}/agent_episodes_sap"
 SUBMISSIONS_PATH = f"{WORKING_FOLDER}/submissions.csv"
 GAMES_PATH = f"{WORKING_FOLDER}/games.csv"
 
@@ -230,8 +233,10 @@ def pars_obs(state, team_actions):
     d[12] = f.nebulae
     d[13] = f.relic
     d[14] = f.reward
-    d[15] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
-    d[16] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
+    d[15] = f.need_to_explore_for_relic
+    d[16] = f.need_to_explore_for_reward
+    # d[15] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
+    # d[16] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
 
     actions = {}
     for ship, action in zip(state.fleet.ships, team_actions):
@@ -245,6 +250,282 @@ def pars_obs(state, team_actions):
                     actions[position] = action_type
 
     return d, actions
+
+
+def convert_episode_sap(episode_data, team_id):
+    win_teams = get_win_team_by_match(episode_data)
+    wins = [x == team_id for x in win_teams]
+    if not any(wins):
+        return
+
+    obs_array_list, gf_list, action_list, step_list = [], [], [], []
+
+    Global.clear()
+    Global.VERBOSITY = 1
+
+    game_params = episode_data["params"]
+    Global.MAX_UNITS = game_params["max_units"]
+    Global.UNIT_MOVE_COST = game_params["unit_move_cost"]
+    Global.UNIT_SAP_COST = game_params["unit_sap_cost"]
+    Global.UNIT_SAP_RANGE = game_params["unit_sap_range"]
+    Global.UNIT_SENSOR_RANGE = game_params["unit_sensor_range"]
+
+    r = Global.UNIT_SAP_RANGE * 2 + 1
+    sap_kernel = np.ones((r, r), dtype=np.int32)
+
+    state = State(team_id)
+    previous_step_unit_array = np.zeros((4, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+    previous_step_sap_array = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+    previous_step_sap_positions = set()
+    previous_step_opp_ships = set()
+    for episode_observations, episode_actions in zip(
+        episode_data["observations"], episode_data["actions"]
+    ):
+        team_observation = convert_episode_step(episode_observations, team_id)
+        team_actions = episode_actions[f"player_{team_id}"]
+
+        state.update(team_observation)
+
+        team_actions = filter_actions(state, team_actions)
+
+        # print(f"start step {state.global_step}")
+
+        update_exploration_flags(
+            state,
+            team_actions,
+            game_params,
+            previous_step_sap_positions,
+            previous_step_opp_ships,
+        )
+
+        if state.match_step == 0:
+            previous_step_unit_array[:] = 0
+            previous_step_sap_array[:] = 0
+            continue
+
+        if any(
+            num_wins > Global.NUM_MATCHES_IN_GAME / 2
+            for num_wins in team_observation["team_wins"]
+        ):
+            break
+
+        is_win = wins[state.match_number]
+        if not is_win:
+            continue
+
+        nebula_tile_energy_reduction_ = (
+            game_params["nebula_tile_energy_reduction"]
+            if Global.NEBULA_ENERGY_REDUCTION_FOUND
+            else 0
+        )
+        obs_array, saps = pars_obs_sap(
+            state, team_actions, nebula_tile_energy_reduction_
+        )
+
+        obs_array[8:12] = previous_step_unit_array
+        previous_step_unit_array = obs_array[2:6].copy()
+
+        obs_array[12] = previous_step_sap_array.copy()
+        unit_sap_dropoff_factor = (
+            game_params["unit_sap_dropoff_factor"]
+            if Global.UNIT_SAP_DROPOFF_FACTOR_FOUND
+            else 0.5
+        )
+        fill_sap_array(
+            state, team_actions, previous_step_sap_array, unit_sap_dropoff_factor
+        )
+
+        if saps:
+
+            if team_id == 1:
+                obs_array = transpose(obs_array, reflective=True)
+                flipped_saps = []
+                for sap in saps:
+                    flipped_saps.append(
+                        {
+                            "unit_position": get_opposite(*sap["unit_position"]),
+                            "unit_energy": sap["unit_energy"],
+                            "sap_position": get_opposite(*sap["sap_position"]),
+                        }
+                    )
+                saps = flipped_saps
+
+        for i, sap in enumerate(saps):
+
+            obs_array_coppy = np.array(obs_array)
+
+            unit_x, unit_y = sap["unit_position"]
+            ship_arr = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int32)
+            ship_arr[unit_y, unit_x] = 1
+            ship_arr = convolve2d(
+                ship_arr,
+                sap_kernel,
+                mode="same",
+                boundary="fill",
+                fillvalue=0,
+            )
+            obs_array_coppy[0] = ship_arr
+
+            other_saps = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+            for other_sap in saps[:i]:
+                sap_x, sap_y = other_sap["sap_position"]
+                for x, y in nearby_positions(sap_x, sap_y, 1):
+                    if x == sap_x and y == sap_y:
+                        other_saps[y, x] += 1
+                    else:
+                        other_saps[y, x] += unit_sap_dropoff_factor
+            other_saps *= Global.UNIT_SAP_COST / Global.MAX_UNIT_ENERGY
+            obs_array_coppy[1] = other_saps
+
+            if Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
+                nebula_tile_drift_direction = (
+                    1 if get_nebula_tile_drift_speed() > 0 else -1
+                )
+                num_steps_before_obstacle_movement = (
+                    state.num_steps_before_obstacle_movement()
+                )
+            else:
+                nebula_tile_drift_direction = 0
+                num_steps_before_obstacle_movement = -Global.MAX_STEPS_IN_MATCH
+
+            gf = (
+                nebula_tile_drift_direction,
+                (
+                    game_params["nebula_tile_energy_reduction"] / Global.MAX_UNIT_ENERGY
+                    if Global.NEBULA_ENERGY_REDUCTION_FOUND
+                    else -1
+                ),
+                Global.UNIT_MOVE_COST / Global.MAX_UNIT_ENERGY,
+                Global.UNIT_SAP_COST / Global.MAX_UNIT_ENERGY,
+                Global.UNIT_SAP_RANGE / Global.SPACE_SIZE,
+                (
+                    game_params["unit_sap_dropoff_factor"]
+                    if Global.UNIT_SAP_DROPOFF_FACTOR_FOUND
+                    else -1
+                ),
+                (
+                    game_params["unit_energy_void_factor"]
+                    if Global.UNIT_ENERGY_VOID_FACTOR_FOUND
+                    else -1
+                ),
+                state.match_step / Global.MAX_STEPS_IN_MATCH,
+                state.match_number / Global.NUM_MATCHES_IN_GAME,
+                num_steps_before_obstacle_movement / Global.MAX_STEPS_IN_MATCH,
+                state.fleet.points / 1000,
+                state.opp_fleet.points / 1000,
+                state.fleet.reward / 1000,
+                state.opp_fleet.reward / 1000,
+                sum(Global.RELIC_RESULTS) / 3,
+                sap["unit_energy"] / Global.MAX_UNIT_ENERGY,
+            )
+
+            obs_array_list.append(obs_array_coppy)
+            gf_list.append(gf)
+            action_list.append(sap["sap_position"])
+            step_list.append(state.global_step)
+
+    return {
+        "states": np.array(obs_array_list, dtype=np.float16),
+        "gfs": np.array(gf_list, dtype=np.float16),
+        "actions": np.array(action_list, dtype=np.int8),
+        "steps": np.array(step_list, dtype=np.int16),
+    }
+
+
+def pars_obs_sap(state, team_actions, nebula_tile_energy_reduction):
+
+    saps = []
+    for ship, action in zip(state.fleet.ships, team_actions):
+        if ship.node is not None and ship.energy >= 0:
+            action_type, sap_dx, sap_dy = action
+            if action_type == ActionType.sap:
+                x, y = ship.node.coordinates
+                saps.append(
+                    {
+                        "unit_position": (x, y),
+                        "unit_energy": ship.energy,
+                        "sap_position": (x + sap_dx, y + sap_dy),
+                    }
+                )
+
+    saps = sorted(saps, key=lambda _: _["unit_energy"])
+
+    energy_field = state.field.energy
+    nebulae_field = state.field.nebulae
+
+    d = np.zeros((21, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+
+    # 0 - sap range
+    # 1 - other units targets
+
+    # 2 - num units
+    # 3 - unit energy
+    for unit in state.fleet:
+        if unit.energy >= 0:
+            x, y = unit.coordinates
+            d[2, y, x] += 1
+            d[3, y, x] += unit.energy
+
+    d[2] /= 10
+    d[3] /= Global.MAX_UNIT_ENERGY
+
+    # 4 - opp unit position
+    # 5 - opp unit energy
+    for unit in state.opp_fleet:
+        if unit.energy >= 0:
+            x, y = unit.coordinates
+            d[4, y, x] += 1
+            d[5, y, x] += unit.energy
+
+    d[4] /= 10
+    d[5] /= Global.MAX_UNIT_ENERGY
+
+    # 6 - num units next step
+    # 7 - unit energy next step
+    for ship, action in zip(state.fleet.ships, team_actions):
+        if ship.node is not None and ship.energy >= 0:
+            x, y = ship.coordinates
+
+            action_type, sap_dx, sap_dy = action
+            action_type = ActionType(action_type)
+            dx, dy = action_type.to_direction()
+            next_x, next_y = clip_int(x + dx), clip_int(y + dy)
+
+            next_energy = ship.energy + energy_field[next_y, next_x]
+            if action_type == ActionType.sap:
+                next_energy -= Global.UNIT_SAP_COST
+            elif action_type != ActionType.center:
+                next_energy -= Global.UNIT_MOVE_COST
+
+            if nebulae_field[next_y, next_x]:
+                next_energy -= nebula_tile_energy_reduction
+
+            d[6, next_y, next_x] += 1
+            d[7, next_y, next_x] += next_energy
+
+    d[6] /= 10
+    d[7] /= Global.MAX_UNIT_ENERGY
+
+    # 8 - previous step unit positions
+    # 9 - previous step unit energy
+    # 10 - previous step opp unit positions
+    # 11 - previous step opp unit energy
+
+    # 12 - previous step sap positions
+
+    f = state.field
+    d[13] = f.vision
+    d[14] = f.energy / Global.MAX_UNIT_ENERGY
+    d[15] = f.asteroid
+    d[16] = f.nebulae
+    d[17] = f.relic
+    d[18] = f.reward
+    d[19] = f.need_to_explore_for_relic
+    d[20] = f.need_to_explore_for_reward
+    # d[15] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
+    # d[16] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
+
+    return d, saps
 
 
 def filter_actions(state, team_actions):
@@ -368,12 +649,13 @@ def apply_actions(state, team_action):
 
 
 def convert_episodes(
-    submission_id, num_episodes=None, min_opp_score=None, num_workers=1
+    submission_id, num_episodes=None, min_opp_score=None, sap=False, num_workers=1
 ):
     random.seed(42)
 
-    if not os.path.exists(OUTPUT_DIR):
-        os.mkdir(OUTPUT_DIR)
+    output_dir = OUTPUT_DIR if not sap else OUTPUT_DIR_SAP
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
 
     games = pd.read_csv(
         GAMES_PATH, usecols=["SubmissionId", "EpisodeId", "OppSubmissionId"]
@@ -395,7 +677,7 @@ def convert_episodes(
     episodes_to_convert = []
     for episode_id in episodes:
         episode_path = f"{EPISODES_DIR}/{episode_id}.json"
-        agent_episode_path = f"{OUTPUT_DIR}/{submission_id}_{episode_id}.npz"
+        agent_episode_path = f"{output_dir}/{submission_id}_{episode_id}.npz"
 
         if not os.path.exists(episode_path) or os.path.exists(agent_episode_path):
             continue
@@ -408,30 +690,40 @@ def convert_episodes(
     if num_workers <= 1:
         for i, episode_id in enumerate(episodes_to_convert, start=1):
             print(f"converting {episode_id}: {i}/{len(episodes_to_convert)}")
-            convert_and_save(submission_id, episode_id)
+            convert_and_save(submission_id, episode_id, sap)
     else:
         submission_ids = [submission_id for _ in episodes_to_convert]
+        saps = [sap for _ in episodes_to_convert]
         process_map(
             convert_and_save,
             submission_ids,
             episodes_to_convert,
+            saps,
             max_workers=num_workers,
         )
 
 
-def convert_and_save(submission_id, episode_id):
+def convert_and_save(submission_id, episode_id, sap=False):
+    output_dir = OUTPUT_DIR if not sap else OUTPUT_DIR_SAP
+
     episode_path = f"{EPISODES_DIR}/{episode_id}.json"
-    agent_episode_path = f"{OUTPUT_DIR}/{submission_id}_{episode_id}.npz"
+    agent_episode_path = f"{output_dir}/{submission_id}_{episode_id}.npz"
 
     episode_data = json.load(open(episode_path, "r"))
     agents = episode_data["metadata"]["agents"]
 
     for team_id, agent in enumerate(agents):
         if agent["submission_id"] == submission_id:
-            agent_episode = convert_episode(episode_data, team_id)
+            if not sap:
+                agent_episode = convert_episode(episode_data, team_id)
+            else:
+                agent_episode = convert_episode_sap(episode_data, team_id)
+
             if not agent_episode or len(agent_episode["steps"]) == 0:
                 continue
+
             np.savez(agent_episode_path, **agent_episode)
+            break
 
 
 def convert_episode_step(episode_step, team_id):
@@ -586,11 +878,18 @@ class Args:
     # minimum score for an opponent
     min_score: Optional[int] = None
 
+    # convert episodes to train sap actions
+    sap: bool = False
+
     num_workers: int = 1
 
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
     convert_episodes(
-        args.submission_id, args.num_episodes, args.min_score, args.num_workers
+        args.submission_id,
+        args.num_episodes,
+        args.min_score,
+        sap=args.sap,
+        num_workers=args.num_workers,
     )

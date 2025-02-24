@@ -123,6 +123,7 @@ def apply_nn(state, previous_state, unit_model, sap_model):
 
 
 def apply_nn_sap_tasks(state, previous_state, sap_model, sap_ships):
+    sap_ships = sorted(sap_ships, key=lambda x: x.energy)
 
     for ship in sap_ships:
         obs, gf = create_sap_nn_input(state, previous_state, ship)
@@ -283,8 +284,6 @@ def create_unit_nn_input(state, previous_state):
     for i in [1, 3, 5, 7]:
         d[i] /= Global.MAX_UNIT_ENERGY
 
-    d[8] = get_sap_array(previous_state)
-
     f = state.field
     d[9] = f.vision
     d[10] = f.energy / Global.MAX_UNIT_ENERGY
@@ -292,8 +291,10 @@ def create_unit_nn_input(state, previous_state):
     d[12] = f.nebulae
     d[13] = f.relic
     d[14] = f.reward
-    d[15] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
-    d[16] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
+    # d[15] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
+    # d[16] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
+    d[15] = f.need_to_explore_for_relic
+    d[16] = f.need_to_explore_for_reward
 
     if state.team_id == 1:
         d = transpose(d, reflective=True).copy()
@@ -337,19 +338,79 @@ def create_sap_nn_input(state, previous_state, sap_ship):
     gf[14] = sum(Global.RELIC_RESULTS) / 3
     gf[15] = sap_ship.energy / Global.MAX_UNIT_ENERGY
 
-    d = np.zeros((20, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
-
     energy_field = state.field.energy
     nebulae_field = state.field.nebulae
 
+    d = np.zeros((21, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
+
+    r = Global.UNIT_SAP_RANGE * 2 + 1
+    sap_kernel = np.ones((r, r), dtype=np.int32)
+    ship_arr = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int32)
+    ship_arr[sap_ship.node.y, sap_ship.node.x] = 1
+    ship_arr = convolve2d(
+        ship_arr,
+        sap_kernel,
+        mode="same",
+        boundary="fill",
+        fillvalue=0,
+    )
+
+    d[0] = ship_arr
+
+    unit_sap_dropoff_factor = (
+        Global.UNIT_SAP_DROPOFF_FACTOR if Global.UNIT_SAP_DROPOFF_FACTOR_FOUND else 0.5
+    )
+
+    other_saps = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
     for unit in state.fleet:
         if unit.energy >= 0:
             x, y = unit.coordinates
-            d[0, y, x] += 1
-            d[1, y, x] += unit.energy
+
+            if unit.action_queue and unit.action_queue[0].type == ActionType.sap:
+                action = unit.action_queue[0]
+                dx, dy = action.dx, action.dy
+                sap_x, sap_y = x + dx, y + dy
+
+                for x, y in nearby_positions(sap_x, sap_y, 1):
+                    if x == sap_x and y == sap_y:
+                        other_saps[y, x] += 1
+                    else:
+                        other_saps[y, x] += unit_sap_dropoff_factor
+
+    other_saps *= Global.UNIT_SAP_COST / Global.MAX_UNIT_ENERGY
+
+    d[1] = other_saps
+
+    # 2 - num units
+    # 3 - unit energy
+    for unit in state.fleet:
+        if unit.energy >= 0:
+            x, y = unit.coordinates
+            d[2, y, x] += 1
+            d[3, y, x] += unit.energy
+
+    d[2] /= 10
+    d[3] /= Global.MAX_UNIT_ENERGY
+
+    # 4 - opp unit position
+    # 5 - opp unit energy
+    for unit in state.opp_fleet:
+        if unit.energy >= 0:
+            x, y = unit.coordinates
+            d[4, y, x] += 1
+            d[5, y, x] += unit.energy
+
+    d[4] /= 10
+    d[5] /= Global.MAX_UNIT_ENERGY
+
+    # 6 - num units next step
+    # 7 - unit energy next step
+    for unit in state.fleet:
+        if unit.energy >= 0:
+            x, y = unit.coordinates
 
             if unit.action_queue:
-                action_type = unit.action_queue[0].type
+                action_type = ActionType(unit.action_queue[0].type)
             else:
                 action_type = ActionType.sap
 
@@ -366,60 +427,45 @@ def create_sap_nn_input(state, previous_state, sap_ship):
             if nebulae_field[next_y, next_x]:
                 next_energy -= Global.NEBULA_ENERGY_REDUCTION
 
-            d[2, next_y, next_x] += 1
-            d[3, next_y, next_x] += next_energy
+            d[6, next_y, next_x] += 1
+            d[7, next_y, next_x] += next_energy
 
-    for unit in state.opp_fleet:
-        if unit.energy >= 0:
-            x, y = unit.coordinates
-            d[4, y, x] += 1
-            d[5, y, x] += unit.energy
+    d[6] /= 10
+    d[7] /= Global.MAX_UNIT_ENERGY
 
+    # 8 - previous step unit positions
+    # 9 - previous step unit energy
     for unit in previous_state.fleet:
-        if unit.energy >= 0:
-            x, y = unit.coordinates
-            d[6, y, x] += 1
-            d[7, y, x] += unit.energy
-
-    for unit in previous_state.opp_fleet:
         if unit.energy >= 0:
             x, y = unit.coordinates
             d[8, y, x] += 1
             d[9, y, x] += unit.energy
 
-    for i in [0, 2, 4, 6, 8]:
-        d[i] /= 10
+    d[8] /= 10
+    d[9] /= Global.MAX_UNIT_ENERGY
 
-    for i in [1, 3, 5, 7, 9]:
-        d[i] /= Global.MAX_UNIT_ENERGY
+    # 10 - previous step opp unit positions
+    # 11 - previous step opp unit energy
+    for unit in previous_state.opp_fleet:
+        if unit.energy >= 0:
+            x, y = unit.coordinates
+            d[10, y, x] += 1
+            d[11, y, x] += unit.energy
 
-    d[10] = get_sap_array(previous_state)
+    d[10] /= 10
+    d[11] /= Global.MAX_UNIT_ENERGY
+
+    d[12] = get_sap_array(previous_state)
 
     f = state.field
-    d[11] = f.vision
-    d[12] = f.energy / Global.MAX_UNIT_ENERGY
-    d[13] = f.asteroid
-    d[14] = f.nebulae
-    d[15] = f.relic
-    d[16] = f.reward
-    d[17] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
-    d[18] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
-
-    ship_arr = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int32)
-    ship_arr[sap_ship.node.y, sap_ship.node.x] = 1
-
-    r = Global.UNIT_SAP_RANGE * 2 + 1
-    sap_kernel = np.ones((r, r), dtype=np.int32)
-
-    ship_arr = convolve2d(
-        ship_arr,
-        sap_kernel,
-        mode="same",
-        boundary="fill",
-        fillvalue=0,
-    )
-
-    d[19] = ship_arr
+    d[13] = f.vision
+    d[14] = f.energy / Global.MAX_UNIT_ENERGY
+    d[15] = f.asteroid
+    d[16] = f.nebulae
+    d[17] = f.relic
+    d[18] = f.reward
+    d[19] = f.need_to_explore_for_relic
+    d[20] = f.need_to_explore_for_reward
 
     if state.team_id == 1:
         d = transpose(d, reflective=True).copy()

@@ -55,7 +55,7 @@ def select_episodes(submission_ids, min_opp_score, val_ratio=0.1):
             num_steps = len(train_data["steps"])
             episodes.add((sid, episode_id, num_steps))
 
-    episodes = list(episodes)
+    episodes = sorted(episodes, key=lambda x: x[1])
     print(f"total number of episodes: {len(episodes)}")
 
     random.shuffle(episodes)
