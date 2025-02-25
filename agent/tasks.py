@@ -252,7 +252,7 @@ def create_unit_nn_input(state, previous_state):
     gf[13] = state.opp_fleet.reward / 1000
     gf[14] = sum(Global.RELIC_RESULTS) / 3
 
-    d = np.zeros((17, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
+    d = np.zeros((19, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
 
     for unit in state.fleet:
         if unit.energy >= 0:
@@ -295,6 +295,8 @@ def create_unit_nn_input(state, previous_state):
     # d[16] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
     d[15] = f.need_to_explore_for_relic
     d[16] = f.need_to_explore_for_reward
+    d[17] = f.num_units_in_sap_range / 10
+    d[18] = f.num_opp_units_in_sap_range / 10
 
     if state.team_id == 1:
         d = transpose(d, reflective=True).copy()

@@ -196,7 +196,7 @@ def convert_episode(episode_data, team_id):
 
 
 def pars_obs(state, team_actions):
-    d = np.zeros((17, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+    d = np.zeros((19, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
 
     # 0 - unit positions
     # 1 - unit energy
@@ -235,6 +235,8 @@ def pars_obs(state, team_actions):
     d[14] = f.reward
     d[15] = f.need_to_explore_for_relic
     d[16] = f.need_to_explore_for_reward
+    d[17] = f.num_units_in_sap_range / 10
+    d[18] = f.num_opp_units_in_sap_range / 10
     # d[15] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
     # d[16] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
 
