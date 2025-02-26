@@ -30,6 +30,7 @@ from agent.base import (
     get_nebula_tile_drift_speed,
 )
 from agent.space import NodeType
+from agent.fleet import find_nebula_vision_reduction
 from agent.state import State
 
 EPISODES_DIR = f"{WORKING_FOLDER}/episodes"
@@ -174,6 +175,7 @@ def convert_episode(episode_data, team_id):
                 state.fleet.reward / 1000,
                 state.opp_fleet.reward / 1000,
                 sum(Global.RELIC_RESULTS) / 3,
+                min(Global.NEBULA_VISION_REDUCTION_OPTIONS) / 8,
             )
 
             obs_array_list.append(obs_array)
@@ -196,7 +198,7 @@ def convert_episode(episode_data, team_id):
 
 
 def pars_obs(state, team_actions):
-    d = np.zeros((19, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+    d = np.zeros((20, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
 
     # 0 - unit positions
     # 1 - unit energy
@@ -237,6 +239,7 @@ def pars_obs(state, team_actions):
     d[16] = f.need_to_explore_for_reward
     d[17] = f.num_units_in_sap_range / 10
     d[18] = f.num_opp_units_in_sap_range / 10
+    d[19] = f.fleet_vision(state.opp_fleet, min(Global.NEBULA_VISION_REDUCTION_OPTIONS))
     # d[15] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
     # d[16] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
 
@@ -813,6 +816,9 @@ def get_win_team_by_match(episode_data):
 def update_exploration_flags(
     state, actions, game_params, previous_step_sap_positions, previous_step_opp_ships
 ):
+
+    if not Global.NEBULA_VISION_REDUCTION_FOUND:
+        find_nebula_vision_reduction(state)
 
     if not Global.NEBULA_ENERGY_REDUCTION_FOUND:
         # we assume that we have found a constant when the first ship enters Nebula

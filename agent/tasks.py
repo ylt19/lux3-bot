@@ -219,7 +219,7 @@ def get_sap_array(previous_state):
 
 def create_unit_nn_input(state, previous_state):
 
-    gf = np.zeros((15, 3, 3), dtype=np.float32)
+    gf = np.zeros((16, 3, 3), dtype=np.float32)
 
     if Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
         nebula_tile_drift_direction = 1 if get_nebula_tile_drift_speed() > 0 else -1
@@ -251,8 +251,9 @@ def create_unit_nn_input(state, previous_state):
     gf[12] = state.fleet.reward / 1000
     gf[13] = state.opp_fleet.reward / 1000
     gf[14] = sum(Global.RELIC_RESULTS) / 3
+    gf[15] = min(Global.NEBULA_VISION_REDUCTION_OPTIONS) / 8
 
-    d = np.zeros((19, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
+    d = np.zeros((20, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
 
     for unit in state.fleet:
         if unit.energy >= 0:
@@ -297,6 +298,7 @@ def create_unit_nn_input(state, previous_state):
     d[16] = f.need_to_explore_for_reward
     d[17] = f.num_units_in_sap_range / 10
     d[18] = f.num_opp_units_in_sap_range / 10
+    d[19] = f.fleet_vision(state.opp_fleet, min(Global.NEBULA_VISION_REDUCTION_OPTIONS))
 
     if state.team_id == 1:
         d = transpose(d, reflective=True).copy()

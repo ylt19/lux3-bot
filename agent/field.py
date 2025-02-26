@@ -105,6 +105,57 @@ class Field:
         return field
 
     @cached_property
+    def sensor_power(self):
+        return self._sensor_power(self._state.fleet)
+
+    @cached_property
+    def opp_sensor_power(self):
+        return self._sensor_power(self._state.opp_fleet)
+
+    @staticmethod
+    def _sensor_power(fleet):
+        r = Global.UNIT_SENSOR_RANGE * 2 + 1
+        sensor_kernel = np.zeros((r, r), dtype=np.float32)
+        for d in range(0, Global.UNIT_SENSOR_RANGE + 1):
+            sensor_kernel[d : r - d, d : r - d] = d + 1
+
+        field = create_empty_field()
+        for unit in fleet:
+            x, y = unit.coordinates
+            field[y, x] += 1
+
+        field = convolve2d(
+            field,
+            sensor_kernel,
+            mode="same",
+            boundary="fill",
+            fillvalue=0,
+        )
+
+        for unit in fleet:
+            x, y = unit.coordinates
+            field[y, x] += 10
+
+        return field
+
+    def fleet_vision(self, fleet, nebula_vision_reduction):
+        sensor_power = self._sensor_power(fleet)
+
+        vision = create_empty_field()
+        for node in self.space:
+            x, y = node.coordinates
+            sp = sensor_power[y, x]
+            if sp < 1:
+                continue
+
+            reduction = 0 if node.type != NodeType.nebula else nebula_vision_reduction
+            is_visible = sp - reduction >= 1
+            if is_visible:
+                vision[y, x] = 1
+
+        return vision
+
+    @cached_property
     def opp_vision(self):
         field = create_empty_field()
         field[np.where(self._state.opp_fleet.vision > 0)] = 1
@@ -163,6 +214,31 @@ class Field:
             StaticField.OPP_DISTANCE = field
 
         return StaticField.OPP_DISTANCE
+
+    @cached_property
+    def num_units_in_sap_range(self):
+        return self._num_units_in_sap_range(self._state.fleet)
+
+    @cached_property
+    def num_opp_units_in_sap_range(self):
+        return self._num_units_in_sap_range(self._state.opp_fleet)
+
+    @staticmethod
+    def _num_units_in_sap_range(fleet):
+        field = create_empty_field()
+        for unit in fleet:
+            x, y = unit.node.coordinates
+            field[y, x] += 1
+
+        sap_kernel = np.ones((3, 3), dtype=np.float32)
+        field = convolve2d(
+            field,
+            sap_kernel,
+            mode="same",
+            boundary="fill",
+            fillvalue=0,
+        )
+        return field
 
     @cached_property
     def rear(self):
