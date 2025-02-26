@@ -33,6 +33,8 @@ class Global:
     UNIT_ENERGY_VOID_FACTOR = 0.125  # OPTIONS: [0.0625, 0.125, 0.25, 0.375]
     LAST_MATCH_STEP_WHEN_RELIC_CAN_APPEAR = 50
     LAST_MATCH_WHEN_RELIC_CAN_APPEAR = 2
+    NEBULA_VISION_REDUCTION = 0  # OPTIONS: [0, 1, 2, 3, 4, 5, 6, 7]
+    NEBULA_VISION_REDUCTION_OPTIONS = list(range(0, 8))
 
     # Exploration flags
     ALL_RELICS_FOUND = False
@@ -43,6 +45,7 @@ class Global:
     UNIT_SAP_DROPOFF_FACTOR_FOUND = False
     UNIT_ENERGY_VOID_FACTOR_FOUND = False
     ENERGY_NODE_MOVEMENT_PERIOD_FOUND = False
+    NEBULA_VISION_REDUCTION_FOUND = False
 
     # Info about completed matches
     NUM_COMPLETED_MATCHES = 0
@@ -146,6 +149,8 @@ class Global:
         cls.OBSTACLE_MOVEMENT_DIRECTION = (0, 0)
         cls.UNIT_SAP_DROPOFF_FACTOR = 0.5
         cls.UNIT_ENERGY_VOID_FACTOR = 0.125
+        cls.NEBULA_VISION_REDUCTION = 0
+        cls.NEBULA_VISION_REDUCTION_OPTIONS = list(range(0, 8))
 
         cls.ALL_RELICS_FOUND = False
         cls.ALL_REWARDS_FOUND = False
@@ -155,6 +160,7 @@ class Global:
         cls.UNIT_SAP_DROPOFF_FACTOR_FOUND = False
         cls.UNIT_ENERGY_VOID_FACTOR_FOUND = False
         cls.ENERGY_NODE_MOVEMENT_PERIOD_FOUND = False
+        cls.NEBULA_VISION_REDUCTION_FOUND = False
 
         cls.NUM_COMPLETED_MATCHES = 0
         cls.NUM_WINS = 0

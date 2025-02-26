@@ -82,9 +82,7 @@ class State:
         self.fleet.update(obs, self.space)
         self.opp_fleet.update(obs, self.space)
 
-        if Global.OBSTACLE_MOVEMENT_PERIOD_FOUND and not obstacles_moving(
-            self.global_step
-        ):
+        if not self.can_obstacles_move_this_step():
             self.space.update_nodes_by_expected_sensor_mask(
                 self.fleet.expected_sensor_mask()
             )
@@ -331,6 +329,23 @@ class State:
 
         self._routes[(start, goal, with_obstacles)] = route
         return route
+
+    def can_obstacles_move_this_step(self) -> bool:
+        if Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:
+            if obstacles_moving(self.global_step):
+                return True
+            return False
+
+        if not Global.OBSTACLE_MOVEMENT_PERIOD_OPTIONS:
+            return True
+
+        if any(
+            elements_moving(self.global_step, p)
+            for p in Global.OBSTACLE_MOVEMENT_PERIOD_OPTIONS
+        ):
+            return True
+
+        return False
 
 
 def show_map(space, my_fleet=None, opp_fleet=None, only_visible=True):

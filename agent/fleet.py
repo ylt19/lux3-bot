@@ -168,7 +168,64 @@ def find_hidden_constants(previous_state, state):
     between ships and opponent's ships (UNIT_SAP_DROPOFF_FACTOR, UNIT_ENERGY_VOID_FACTOR).
     """
     _find_nebula_energy_reduction(previous_state, state)
+    find_nebula_vision_reduction(state)
     _find_ship_interaction_constants(previous_state, state)
+
+
+def find_nebula_vision_reduction(state):
+    if Global.NEBULA_VISION_REDUCTION_FOUND:
+        return
+
+    if not Global.NEBULA_VISION_REDUCTION_OPTIONS:
+        return
+
+    if state.can_obstacles_move_this_step():
+        return
+
+    sensor_power = state.field.sensor_power
+    for node in state.space:
+        sp = sensor_power[node.y, node.x]
+        if sp <= 0:
+            continue
+
+        suitable_options = []
+        if node.is_visible and node.type == NodeType.nebula:
+            for option in Global.NEBULA_VISION_REDUCTION_OPTIONS:
+                if sp - option >= 1:
+                    suitable_options.append(option)
+        elif not node.is_visible:
+            for option in Global.NEBULA_VISION_REDUCTION_OPTIONS:
+                if sp - option < 1:
+                    suitable_options.append(option)
+        else:
+            continue
+
+        obs = f"node = {node.coordinates}, sensor power = {sp}, visible = {node.is_visible}"
+
+        if not suitable_options:
+            log(
+                f"Can't find an nebula vision reduction, which would fits to the observation: {obs}",
+                level=1,
+            )
+
+        if len(suitable_options) == 1:
+            v = suitable_options[0]
+            log(
+                f"There is only one nebula tile vision reduction ({v}), "
+                f"that fit the observation: {obs}",
+            )
+            log(f"Find param NEBULA_VISION_REDUCTION = {v}")
+            Global.NEBULA_VISION_REDUCTION = v
+            Global.NEBULA_VISION_REDUCTION_FOUND = True
+            Global.NEBULA_VISION_REDUCTION_OPTIONS = [v]
+            return
+
+        if len(suitable_options) < len(Global.NEBULA_VISION_REDUCTION_OPTIONS):
+            log(
+                f"There are {len(suitable_options)} obstacle movement periods ({suitable_options}), "
+                f"that fit the observation: {obs}"
+            )
+            Global.NEBULA_VISION_REDUCTION_OPTIONS = suitable_options
 
 
 def _find_nebula_energy_reduction(previous_state, state):

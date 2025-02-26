@@ -133,7 +133,6 @@ class Space:
             row = [Node(x, y) for x in range(SPACE_SIZE)]
             self._nodes.append(row)
 
-        self._relic_id_to_node = {}
         self._relic_nodes: set[Node] = set()
         self._reward_nodes: set[Node] = set()
 
