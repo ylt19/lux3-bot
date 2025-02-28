@@ -16,7 +16,7 @@ EPISODES_DIR = "dataset/episodes"
 AGENT_EPISODES_DIR = "dataset/agent_episodes"
 MODEL_NAME = "unit_unet"
 
-N_CHANNELS = 19
+N_CHANNELS = 24
 N_GLOBAL = 15
 N_CLASSES = 6
 

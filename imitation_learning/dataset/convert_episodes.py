@@ -198,7 +198,7 @@ def convert_episode(episode_data, team_id):
 
 
 def pars_obs(state, team_actions):
-    d = np.zeros((20, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+    d = np.zeros((24, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
 
     # 0 - unit positions
     # 1 - unit energy
@@ -240,8 +240,23 @@ def pars_obs(state, team_actions):
     d[17] = f.num_units_in_sap_range / 10
     d[18] = f.num_opp_units_in_sap_range / 10
     d[19] = f.fleet_vision(state.opp_fleet, min(Global.NEBULA_VISION_REDUCTION_OPTIONS))
-    # d[15] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
-    # d[16] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
+    d[20] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
+    d[21] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
+
+    # 22 - out of vision opp unit position
+    # 23 - out of vision opp unit energy
+    for unit in state.opp_fleet.ships:
+        if (
+            unit.node is not None
+            and unit.energy >= 0
+            and unit.steps_since_last_seen > 0
+        ):
+            x, y = unit.coordinates
+            d[22, y, x] += 1
+            d[23, y, x] += unit.energy
+
+    d[22] /= 10
+    d[23] /= Global.MAX_UNIT_ENERGY
 
     actions = {}
     for ship, action in zip(state.fleet.ships, team_actions):
