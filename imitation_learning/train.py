@@ -34,7 +34,7 @@ def seed_everything(seed_value):
         torch.backends.cudnn.benchmark = True
 
 
-def select_episodes(submission_ids, min_opp_score, val_ratio=0.1):
+def select_episodes(submission_ids, min_opp_score, val_ratio=0.1, num_episodes=None):
     seed_everything(42)
 
     submissions_df = pd.read_csv("dataset/submissions.csv")
@@ -51,29 +51,23 @@ def select_episodes(submission_ids, min_opp_score, val_ratio=0.1):
     for sid, episode_id in zip(games_df["SubmissionId"], games_df["EpisodeId"]):
         path = f"{AGENT_EPISODES_DIR}/{sid}_{episode_id}.npz"
         if os.path.exists(path):
-            train_data = np.load(path)
-            num_steps = len(train_data["steps"])
-            episodes.add((sid, episode_id, num_steps))
+            episodes.add(path)
 
     episodes = sorted(episodes, key=lambda x: x[1])
+    if num_episodes is not None:
+        episodes = episodes[:num_episodes]
+
     print(f"total number of episodes: {len(episodes)}")
 
     random.shuffle(episodes)
     num_train = int(len(episodes) * (1 - val_ratio))
 
-    train_episode_steps, val_episode_steps = [], []
-    for i, (sid, episode_id, num_steps) in enumerate(episodes):
-        episode_steps = [(sid, episode_id, s) for s in range(num_steps)]
+    train_episodes, val_episodes = episodes[:num_train], episodes[num_train:]
 
-        if i <= num_train:
-            train_episode_steps += episode_steps
-        else:
-            val_episode_steps += episode_steps
+    print(f"train size: {len(train_episodes)}")
+    print(f"val size: {len(val_episodes)}")
 
-    print(f"train size: {len(train_episode_steps)}")
-    print(f"val size: {len(val_episode_steps)}")
-
-    return train_episode_steps, val_episode_steps
+    return train_episodes, val_episodes
 
 
 # ===================#
@@ -83,18 +77,30 @@ def select_episodes(submission_ids, min_opp_score, val_ratio=0.1):
 
 class LuxDataset(Dataset):
 
-    def __init__(self, episode_steps, aug=True):
-        self.episode_steps = episode_steps
+    def __init__(self, episodes, aug=True):
+        self.episode_steps = []
+        self.episode_id_to_data = {}
+        for episode_id, episode_path in enumerate(episodes):
+            npz_file = np.load(episode_path)
+
+            self.episode_id_to_data[episode_id] = {
+                "states": npz_file["states"],
+                "gfs": npz_file["gfs"],
+                "actions": npz_file["actions"],
+            }
+
+            for j in range(len(npz_file["states"])):
+                self.episode_steps.append((episode_id, j))
+
         self.aug = aug
 
     def __len__(self):
         return len(self.episode_steps)
 
     def __getitem__(self, idx):
-        sid, episode_id, step = self.episode_steps[idx]
+        episode_id, step = self.episode_steps[idx]
 
-        path = f"{AGENT_EPISODES_DIR}/{sid}_{episode_id}.npz"
-        data = np.load(path)
+        data = self.episode_id_to_data[episode_id]
 
         state = data["states"][step]
         gf_values = data["gfs"][step]
@@ -301,14 +307,39 @@ def get_acc(policy, label, label_to_acc):
 
 
 def train_model(
-    model, dataloaders_dict, optimizer, scheduler, num_epochs, model_name="model"
+    model,
+    train_episodes,
+    val_episodes,
+    optimizer,
+    scheduler,
+    num_epochs,
+    model_name="model",
+    num_episodes_per_epoch=1000,
+    batch_size=128,
 ):
     best_acc = 0.0
+
+    val_loader = DataLoader(
+        LuxDataset(val_episodes), batch_size=batch_size, shuffle=False, num_workers=0
+    )
 
     for epoch in range(num_epochs):
         model.cuda()
 
-        for phase in ["train", "val"]:
+        np.random.shuffle(train_episodes)
+
+        train_dataloader = DataLoader(
+            LuxDataset(train_episodes[:num_episodes_per_epoch]),
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=0,
+        )
+
+        phases = [("train", train_dataloader)]
+        if (epoch + 1) % 5 == 0:
+            phases.append(("val", val_loader))
+
+        for phase, dataloader in phases:
             if phase == "train":
                 model.train()
             else:
@@ -321,7 +352,6 @@ def train_model(
 
             label_to_acc = {x: [0, 0] for x in ActionType}
 
-            dataloader = dataloaders_dict[phase]
             for item in tqdm(dataloader, leave=False):
                 states = item[0].cuda().float()
                 gf = item[1].cuda().float()
@@ -365,7 +395,7 @@ def train_model(
             traced = torch.jit.trace(
                 model.cpu(),
                 example_inputs=(
-                    torch.rand(1, N_CHANNELS, 24, 24),
+                    torch.rand(1, N_CHANNELS, SPACE_SIZE, SPACE_SIZE),
                     torch.rand(1, N_GLOBAL, 3, 3),
                 ),
             )
@@ -375,50 +405,21 @@ def train_model(
             best_acc = epoch_acc
 
 
-def train(
-    train_data,
-    val_data,
-    model_name="model",
-    num_epochs=30,
-    batch_size=64,
-):
+def main(submission_ids, min_opp_score):
+    train_episodes, val_episodes = select_episodes(submission_ids, min_opp_score)
+
     seed_everything(42)
-
-    model = UNet()  # torch.jit.load(f'{model_name}.pth')
-
-    train_loader = DataLoader(
-        LuxDataset(train_data),
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=6,
-    )
-    val_loader = DataLoader(
-        LuxDataset(val_data), batch_size=batch_size, shuffle=False, num_workers=4
-    )
-    dataloaders_dict = {"train": train_loader, "val": val_loader}
-
+    model = UNet()
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, "min", factor=0.1, patience=0, min_lr=1e-6, verbose=True
     )
     train_model(
         model,
-        dataloaders_dict,
+        train_episodes,
+        val_episodes,
         optimizer,
         scheduler,
-        num_epochs=num_epochs,
-        model_name=model_name,
-    )
-
-
-def main(submission_ids, min_opp_score):
-    train_episode_steps, val_episode_steps = select_episodes(
-        submission_ids, min_opp_score
-    )
-    train(
-        train_episode_steps,
-        val_episode_steps,
+        num_epochs=50,
         model_name=MODEL_NAME,
-        num_epochs=15,
-        batch_size=256,
     )
