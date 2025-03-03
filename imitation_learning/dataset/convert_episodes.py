@@ -375,6 +375,7 @@ def convert_episode_sap(episode_data, team_id):
             obs_array_coppy = np.array(obs_array)
 
             unit_x, unit_y = sap["unit_position"]
+            obs_array_coppy[21, unit_y, unit_x] = 1
             ship_arr = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int32)
             ship_arr[unit_y, unit_x] = 1
             ship_arr = convolve2d(
@@ -437,6 +438,7 @@ def convert_episode_sap(episode_data, team_id):
                 state.opp_fleet.reward / 1000,
                 sum(Global.RELIC_RESULTS) / 3,
                 sap["unit_energy"] / Global.MAX_UNIT_ENERGY,
+                min(Global.NEBULA_VISION_REDUCTION_OPTIONS) / 8,
             )
 
             obs_array_list.append(obs_array_coppy)
@@ -473,7 +475,7 @@ def pars_obs_sap(state, team_actions, nebula_tile_energy_reduction):
     energy_field = state.field.energy
     nebulae_field = state.field.nebulae
 
-    d = np.zeros((21, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+    d = np.zeros((29, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
 
     # 0 - sap range
     # 1 - other units targets
@@ -542,8 +544,27 @@ def pars_obs_sap(state, team_actions, nebula_tile_energy_reduction):
     d[18] = f.reward
     d[19] = f.need_to_explore_for_relic
     d[20] = f.need_to_explore_for_reward
-    # d[15] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
-    # d[16] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
+    d[21] = 0  # unit position
+    d[22] = f.num_units_in_sap_range / 10
+    d[23] = f.num_opp_units_in_sap_range / 10
+    d[24] = f.fleet_vision(state.opp_fleet, min(Global.NEBULA_VISION_REDUCTION_OPTIONS))
+    d[25] = (state.global_step - f.last_relic_check) / Global.MAX_STEPS_IN_MATCH
+    d[26] = (state.global_step - f.last_step_in_vision) / Global.MAX_STEPS_IN_MATCH
+
+    # 27 - out of vision opp unit position
+    # 28 - out of vision opp unit energy
+    for unit in state.opp_fleet.ships:
+        if (
+            unit.node is not None
+            and unit.energy >= 0
+            and unit.steps_since_last_seen > 0
+        ):
+            x, y = unit.coordinates
+            d[27, y, x] += 1
+            d[28, y, x] += unit.energy
+
+    d[27] /= 10
+    d[28] /= Global.MAX_UNIT_ENERGY
 
     return d, saps
 
