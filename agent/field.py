@@ -2,7 +2,6 @@ import numpy as np
 from functools import cached_property
 from collections import defaultdict
 
-from pathfinding import Grid, ResumableDijkstra
 from scipy.signal import convolve2d
 
 from .path import NodeType
@@ -240,40 +239,9 @@ class Field:
         )
         return field
 
-    @cached_property
-    def rear(self):
-        field = create_empty_field()
-
-        visibility_weights = np.ones((SPACE_SIZE, SPACE_SIZE), np.float32)
-        straight_weights = np.ones((SPACE_SIZE, SPACE_SIZE), np.float32)
-        for node in self.space:
-            if not node.is_walkable:
-                visibility_weights[node.y, node.x] = -1
-                straight_weights[node.y, node.x] = -1
-            if node.is_visible:
-                visibility_weights[node.y, node.x] = -1
-
-        visibility_grid = Grid(visibility_weights)
-        straight_grid = Grid(straight_weights)
-
-        opp_spawn_position = self._state.opp_fleet.spawn_position
-        visibility_rs = ResumableDijkstra(visibility_grid, opp_spawn_position)
-        straight_rs = ResumableDijkstra(straight_grid, opp_spawn_position)
-
-        for node in self.space:
-            visibility_path = visibility_rs.find_path(node.coordinates)
-            straight_path = straight_rs.find_path(node.coordinates)
-
-            if len(straight_path) < len(visibility_path):
-                field[node.y, node.x] = 1
-
-        return field
-
-    @cached_property
+    @property
     def control(self):
-        field = np.logical_or(self.vision > 0, self.rear > 0)
-        field = np.logical_or(field, self.distance < SPACE_SIZE / 2)
-        return field
+        return self.vision
 
     @cached_property
     def opp_ships_potential_positions(self):

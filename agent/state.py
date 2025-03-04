@@ -2,8 +2,6 @@ from copy import deepcopy
 
 import numpy as np
 from collections import defaultdict
-from pathfinding import AStar
-from pathfinding.visualization import animate_grid
 
 from .base import (
     log,
@@ -34,16 +32,10 @@ class State:
         self.fleet = Fleet(team_id)
         self.opp_fleet = Fleet(self.opp_team_id)
 
-        self._reservation_table = None
-        self._routes = None
-
         self.grid = None
         self.field = None
 
     def update(self, obs):
-        self._reservation_table = None
-
-        self._routes = None
 
         if obs["steps"] > 0:
             self._update_step_counters()
@@ -234,6 +226,8 @@ class State:
             log(m)
 
     def to_animation(self, file_name=None):
+        from pathfinding.visualization import animate_grid
+
         if not file_name:
             file_name = f"step_{self.global_step}.mp4"
 
@@ -314,21 +308,6 @@ class State:
 
     def is_game_over(self):
         return self.get_game_status() != 0
-
-    def route(self, start, goal, with_obstacles=True):
-        if self._routes is None:
-            self._routes = {}
-
-        if (start, goal, with_obstacles) in self._routes:
-            return self._routes[(start, goal, with_obstacles)]
-
-        if with_obstacles:
-            route = AStar(self.grid.energy_gain_with_asteroids).find_path(start, goal)
-        else:
-            route = AStar(self.grid.energy_gain).find_path(start, goal)
-
-        self._routes[(start, goal, with_obstacles)] = route
-        return route
 
     def can_obstacles_move_this_step(self) -> bool:
         if Global.OBSTACLE_MOVEMENT_PERIOD_FOUND:

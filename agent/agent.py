@@ -33,6 +33,7 @@ class Agent:
 
     def act(self, step: int, obs, remaining_overage_time: int = 60):
         state = self.state
+        self.previous_state = state.copy()
 
         state.update(obs)
 
@@ -59,5 +60,4 @@ class Agent:
 
         # state.show_tasks(show_path=False)
 
-        self.previous_state = state.copy()
         return state.create_actions_array()

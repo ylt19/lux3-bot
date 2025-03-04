@@ -1,7 +1,6 @@
 import copy
 import numpy as np
 from functools import cached_property
-from pathfinding import Grid as w9_Grid, ResumableSpaceTimeDijkstra, ReservationTable
 
 from .path import NodeType
 from .base import Global, warp_point, cardinal_positions, obstacles_moving
@@ -39,6 +38,8 @@ class Grid:
 
     @cached_property
     def energy_with_low_ground(self):
+        from pathfinding import Grid as w9_Grid
+
         ground = Global.UNIT_MOVE_COST
 
         weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
@@ -52,6 +53,8 @@ class Grid:
 
     @cached_property
     def energy_gain(self):
+        from pathfinding import Grid as w9_Grid
+
         ground = Global.Params.ENERGY_TO_WEIGHT_GROUND
 
         weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
@@ -62,6 +65,8 @@ class Grid:
 
     @cached_property
     def energy_gain_with_asteroids(self):
+        from pathfinding import Grid as w9_Grid
+
         ground = Global.Params.ENERGY_TO_WEIGHT_GROUND
 
         weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
@@ -83,6 +88,8 @@ class Grid:
         return Global.Params.ENERGY_TO_WEIGHT_BASE ** (ground - energy)
 
     def resumable_search(self, unit_id, team_id=None):
+        from pathfinding import ResumableSpaceTimeDijkstra
+
         if team_id is None:
             team_id = self._state.team_id
 
@@ -112,6 +119,8 @@ class Grid:
 
     @cached_property
     def reservation_table(self):
+        from pathfinding import ReservationTable
+
         reservation_table = ReservationTable(self.energy)
         add_dynamic_environment(reservation_table, self._state)
         return reservation_table
