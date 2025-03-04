@@ -28,6 +28,8 @@ class Grid:
 
     @cached_property
     def energy(self):
+        from pathfinding import Grid as w9_Grid
+
         ground = self.ENERGY_TO_WEIGHT_GROUND
 
         weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)

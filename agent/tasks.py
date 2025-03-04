@@ -14,7 +14,7 @@ from .base import (
     nearby_positions,
     get_nebula_tile_drift_speed,
 )
-from .path import Action, ActionType
+from .path import Action, ActionType, path_to_actions
 from .msg import print_msg
 
 
@@ -26,9 +26,52 @@ def find_moves(agent):
 
 
 def apply_rb(state):
-    if Global.Params.MSG_TASK:
+    if Global.Params.MSG_TASK and not Global.Params.MSG_TASK_FINISHED:
+        collect_energy(state)
         print_msg(state)
         return
+
+
+def collect_energy(state):
+
+    def find_target(ship):
+        rs = state.grid.resumable_search(ship.unit_id)
+        steps_left_in_match = state.steps_left_in_match()
+
+        node_to_score = {}
+        for node in state.space:
+            x, y = node.coordinates
+            path = rs.find_path((x, y))
+            if path and len(path) < steps_left_in_match:
+                node = state.space.get_node(x, y)
+                node_to_score[node] = node.energy_gain
+
+        if not node_to_score:
+            return
+
+        best_score = max(node_to_score.values())
+        closest_target, min_distance = None, float("inf")
+        for node, score in node_to_score.items():
+            if score >= best_score - 1:
+                distance = rs.distance((node.x, node.y))
+                if distance < min_distance:
+                    closest_target, min_distance = node, distance
+
+        return closest_target
+
+    def apply(ship, target):
+        if not target:
+            return
+
+        rs = state.grid.resumable_search(ship.unit_id)
+        path = rs.find_path(target.coordinates)
+        if not path:
+            return
+
+        ship.action_queue = path_to_actions(path)
+
+    for s in state.fleet:
+        apply(s, find_target(s))
 
 
 def apply_nn(state, previous_state, unit_model, sap_model):
