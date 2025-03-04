@@ -80,55 +80,14 @@ class Global:
     # Game Params:
     class DefaultParams:
         IL = True
-
         HIDDEN_NODE_ENERGY = 0
-        ENERGY_TO_WEIGHT_BASE = 1.2
-        ENERGY_TO_WEIGHT_GROUND = 12
-
-        RELIC_FINDER_TASK = True
-        RELIC_FINDER_NUM_TASKS = 10
-        RELIC_FINDER_INIT_SCORE = 1000
-        RELIC_FINDER_PATH_LENGTH_MULTIPLIER = -5
-        RELIC_FINDER_ENERGY_COST_MULTIPLIER = -0.1
-
-        VOID_SEEKER_TASK = True
-        VOID_SEEKER_INIT_SCORE = 1200
-        VOID_SEEKER_PATH_LENGTH_MULTIPLIER = -5
-        VOID_SEEKER_ENERGY_COST_MULTIPLIER = -0.2
-
-        CONTROL_TASK = True
-        CONTROL_REWARD_SCORE = 100
-        CONTROL_INIT_SCORE = 800
-        CONTROL_PATH_LENGTH_MULTIPLIER = -5
-        CONTROL_ENERGY_COST_MULTIPLIER = -0.2
-        CONTROL_NODE_ENERGY_MULTIPLIER = 5
-        CONTROL_MIDDLE_LANE_DISTANCE_MULTIPLIER = 0
-
-        HEAL_TASK = True
-        HEAL_NEAR_REWARDS = True
-        HEAL_INIT_SCORE = 600
-        HEAL_OPP_SPAWN_DISTANCE_MULTIPLIER = -1
-        HEAL_SHIP_ENERGY_MULTIPLIER = -1
-
         MSG_TASK = False
         MSG_TASK_STARTED = False
         MSG_TASK_FINISHED = False
 
-    class MatchOverChill(DefaultParams):
+    class GameOverParams(DefaultParams):
         IL = False
-        CONTROL_TASK = False
-        VOID_SINGER_INIT_SCORE = 1000
-        VOID_SINGER_MIDDLE_LANE_DISTANCE_MULTIPLIER = 100
-
-    class GameOverChill(DefaultParams):
-        IL = False
-        RELIC_FINDER_TASK = False
-        VOID_SEEKER_TASK = False
-        CONTROL_TASK = False
-        HEAL_TASK = False
-        HEAL_NEAR_REWARDS = False
         if IS_KAGGLE:
-            HEAL_TASK = True
             MSG_TASK = True
 
     Params = DefaultParams

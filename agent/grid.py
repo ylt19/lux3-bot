@@ -7,6 +7,9 @@ from .base import Global, warp_point, cardinal_positions, obstacles_moving
 
 
 class Grid:
+    ENERGY_TO_WEIGHT_BASE = 1.2
+    ENERGY_TO_WEIGHT_GROUND = 12
+
     def __init__(self, state):
         self._state = state
 
@@ -25,7 +28,7 @@ class Grid:
 
     @cached_property
     def energy(self):
-        ground = Global.Params.ENERGY_TO_WEIGHT_GROUND
+        ground = self.ENERGY_TO_WEIGHT_GROUND
 
         weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
         for node in self.space:
@@ -55,7 +58,7 @@ class Grid:
     def energy_gain(self):
         from pathfinding import Grid as w9_Grid
 
-        ground = Global.Params.ENERGY_TO_WEIGHT_GROUND
+        ground = self.ENERGY_TO_WEIGHT_GROUND
 
         weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
         for node in self.space:
@@ -67,7 +70,7 @@ class Grid:
     def energy_gain_with_asteroids(self):
         from pathfinding import Grid as w9_Grid
 
-        ground = Global.Params.ENERGY_TO_WEIGHT_GROUND
+        ground = self.ENERGY_TO_WEIGHT_GROUND
 
         weights = np.zeros((Global.SPACE_SIZE, Global.SPACE_SIZE), np.float32)
         for node in self.space:
@@ -81,11 +84,10 @@ class Grid:
 
         return w9_Grid(weights, pause_action_cost="node.weight")
 
-    @staticmethod
-    def energy_to_weight(energy, ground):
+    def energy_to_weight(self, energy, ground):
         if energy < ground:
             return ground - energy + 1
-        return Global.Params.ENERGY_TO_WEIGHT_BASE ** (ground - energy)
+        return self.ENERGY_TO_WEIGHT_BASE ** (ground - energy)
 
     def resumable_search(self, unit_id, team_id=None):
         from pathfinding import ResumableSpaceTimeDijkstra

@@ -87,15 +87,12 @@ class State:
     def _update_game_params(self):
 
         if self.is_game_over():
-            set_game_prams(Global.GameOverChill)
+            set_game_prams(Global.GameOverParams)
             return
 
         if self.match_step == 0:
             set_game_prams(Global.DefaultParams)
             return
-
-        if self.is_match_over():
-            set_game_prams(Global.MatchOverChill)
 
     def _update_step_counters(self):
         self.global_step += 1
