@@ -49,7 +49,7 @@ class State:
             self.fleet.clear()
             self.opp_fleet.clear()
             self.space.clear(self.global_step)
-            self.space.clear_exploration_info()
+            self.space.clear_exploration_info(self.global_step)
             self.space.move_obstacles(self.global_step)
             self._update_game_params()
             self.field = Field(self)

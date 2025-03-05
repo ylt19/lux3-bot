@@ -13,6 +13,7 @@ from .base import (
     get_match_number,
     get_match_step,
     elements_moving,
+    can_relic_appear,
     obstacles_moving,
     chebyshev_distance,
 )
@@ -268,6 +269,8 @@ class Space:
         self, global_step, obs, team_id, team_reward, opp_team_id, opp_team_reward
     ):
         match = get_match_number(global_step)
+        match_step = get_match_step(global_step)
+        match_number = get_match_number(global_step)
 
         for relic_id, (mask, xy) in enumerate(
             zip(obs["relic_nodes_mask"], obs["relic_nodes"])
@@ -285,26 +288,42 @@ class Space:
                 for reward_result in Global.REWARD_RESULTS:
                     reward_result["trust"] = False
 
-        all_relics_found = True
         all_rewards_found = True
+
+        possible_relic_spawn = can_relic_appear(global_step)
+
         for node in self:
             if node.is_visible and not node.explored_for_relic:
                 self._update_relic_status(*node.coordinates, status=False)
 
-            if not node.explored_for_relic:
-                all_relics_found = False
+            if possible_relic_spawn:
+                opp_node = self.get_opposite_node(*node.coordinates)
+                if not node.is_visible and not opp_node.is_visible:
+                    if not node.relic and node.explored_for_relic:
+                        self._update_relic_status(*node.coordinates, status=None)
 
             if not node.explored_for_reward:
                 all_rewards_found = False
 
-        Global.ALL_RELICS_FOUND = all_relics_found
         Global.ALL_REWARDS_FOUND = all_rewards_found
 
         num_relics_found = sum(Global.RELIC_RESULTS)
         # the maximum number of relics (without duplicates) we can find at this stage
         num_relics_th = min(match, Global.LAST_MATCH_WHEN_RELIC_CAN_APPEAR) + 1
 
-        if num_relics_found >= num_relics_th:
+        if not Global.ALL_RELICS_FOUND:
+            if num_relics_found >= Global.LAST_MATCH_WHEN_RELIC_CAN_APPEAR + 1:
+                log(f"Found all relics: {Global.RELIC_RESULTS}", level=2)
+                Global.ALL_RELICS_FOUND = True
+
+            if match_number >= 2:
+                if num_relics_found >= 1 and all(
+                    node.explored_for_relic for node in self
+                ):
+                    log(f"Found all relics: {Global.RELIC_RESULTS}", level=2)
+                    Global.ALL_RELICS_FOUND = True
+
+        if num_relics_found >= num_relics_th or Global.ALL_RELICS_FOUND:
             for node in self:
                 if not node.explored_for_relic:
                     self._update_relic_status(*node.coordinates, status=False)
@@ -561,49 +580,16 @@ class Space:
                 self.get_node(x, y).type = node_type
             return self
 
-    def create_relic_exploration_statuses_array(self):
-        """
-        returns an array with relic exploration statuses:
-            1 - explored for relic
-            0 - not explored
-        """
-
-        a = np.ones((SPACE_SIZE, SPACE_SIZE), dtype=np.int16)
-        if Global.ALL_RELICS_FOUND:
-            return a
-
-        for node in self:
-            if not node.explored_for_relic:
-                x, y = node.coordinates
-                a[y, x] = 0
-
-        return a
-
-    def create_reward_exploration_statuses_array(self):
-        """
-        returns an array with reward exploration statuses:
-            1 - explored for reward
-            0 - not explored
-        """
-
-        a = np.ones((SPACE_SIZE, SPACE_SIZE), dtype=np.int16)
-        if Global.ALL_REWARDS_FOUND:
-            return a
-
-        for node in self:
-            if not node.explored_for_reward:
-                x, y = node.coordinates
-                a[y, x] = 0
-
-        return a
-
-    def clear_exploration_info(self):
+    def clear_exploration_info(self, global_step):
         Global.REWARD_RESULTS = []
-        Global.ALL_RELICS_FOUND = False
         Global.ALL_REWARDS_FOUND = False
-        for node in self:
-            if not node.relic:
-                self._update_relic_status(node.x, node.y, status=None)
+
+        if not Global.ALL_RELICS_FOUND:
+            match_number = get_match_number(global_step)
+            if match_number <= Global.LAST_MATCH_WHEN_RELIC_CAN_APPEAR:
+                for node in self:
+                    if not node.relic:
+                        self._update_relic_status(node.x, node.y, status=None)
 
     def _filter_reward_results(self, step):
 

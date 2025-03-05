@@ -289,6 +289,23 @@ def energy_nodes_moving(step):
     return elements_moving(step, movement_period=Global.ENERGY_NODE_MOVEMENT_PERIOD)
 
 
+def can_relic_appear(global_step) -> bool:
+    match_number = get_match_number(global_step)
+    if match_number > Global.LAST_MATCH_WHEN_RELIC_CAN_APPEAR:
+        return False
+
+    match_step = get_match_step(global_step)
+    if match_step > Global.LAST_MATCH_STEP_WHEN_RELIC_CAN_APPEAR:
+        return False
+
+    num_relics_found = sum(Global.RELIC_RESULTS)
+    num_relics_th = min(match_number, Global.LAST_MATCH_WHEN_RELIC_CAN_APPEAR) + 1
+    if num_relics_found >= num_relics_th:
+        return False
+
+    return True
+
+
 class Task:
     def __init__(self, target):
         self.target = target
