@@ -58,6 +58,9 @@ def convert_episode(episode_data, team_id):
     Global.UNIT_SAP_RANGE = game_params["unit_sap_range"]
     Global.UNIT_SENSOR_RANGE = game_params["unit_sensor_range"]
 
+    r = Global.UNIT_SAP_RANGE * 2 + 1
+    sap_kernel = np.ones((r, r), dtype=np.int32)
+
     state = State(team_id)
     previous_step_unit_array = np.zeros((4, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
     previous_step_sap_array = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
@@ -98,7 +101,7 @@ def convert_episode(episode_data, team_id):
         if not is_win:
             continue
 
-        obs_array, position_to_action = pars_obs(state, team_actions)
+        obs_array, position_to_action = pars_obs(state, team_actions, sap_kernel)
 
         obs_array[4:8] = previous_step_unit_array
         previous_step_unit_array = obs_array[:4].copy()
@@ -176,6 +179,7 @@ def convert_episode(episode_data, team_id):
                 state.opp_fleet.reward / 1000,
                 sum(Global.RELIC_RESULTS) / 3,
                 min(Global.NEBULA_VISION_REDUCTION_OPTIONS) / 8,
+                Global.ALL_RELICS_FOUND,
             )
 
             obs_array_list.append(obs_array)
@@ -197,8 +201,8 @@ def convert_episode(episode_data, team_id):
     }
 
 
-def pars_obs(state, team_actions):
-    d = np.zeros((24, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+def pars_obs(state, team_actions, sap_kernel):
+    d = np.zeros((32, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
 
     # 0 - unit positions
     # 1 - unit energy
@@ -257,6 +261,60 @@ def pars_obs(state, team_actions):
 
     d[22] /= 10
     d[23] /= Global.MAX_UNIT_ENERGY
+
+    # 24 - unit wo energy count
+    # 25 - can move
+    # 26 - can sap
+    # 27 - sap count
+    for unit in state.fleet:
+        x, y = unit.coordinates
+        if unit.energy < 0:
+            d[24, y, x] += 1
+        if unit.energy >= Global.UNIT_MOVE_COST:
+            d[25, y, x] += 1
+        if unit.energy >= Global.UNIT_SAP_COST:
+            d[26, y, x] += 1
+            d[27, y, x] += 1
+
+    d[27] = convolve2d(
+        d[27],
+        sap_kernel,
+        mode="same",
+        boundary="fill",
+        fillvalue=0,
+    )
+
+    d[24] /= 10
+    d[25] /= 10
+    d[26] /= 10
+    d[27] /= 10
+
+    # 28 - opp unit wo energy count
+    # 29 - opp can move
+    # 30 - opp can sap
+    # 31 - opp sap count
+    for unit in state.opp_fleet:
+        x, y = unit.coordinates
+        if unit.energy < 0:
+            d[28, y, x] += 1
+        if unit.energy >= Global.UNIT_MOVE_COST:
+            d[29, y, x] += 1
+        if unit.energy >= Global.UNIT_SAP_COST:
+            d[30, y, x] += 1
+            d[31, y, x] += 1
+
+    d[31] = convolve2d(
+        d[31],
+        sap_kernel,
+        mode="same",
+        boundary="fill",
+        fillvalue=0,
+    )
+
+    d[28] /= 10
+    d[29] /= 10
+    d[30] /= 10
+    d[31] /= 10
 
     actions = {}
     for ship, action in zip(state.fleet.ships, team_actions):

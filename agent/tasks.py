@@ -188,8 +188,10 @@ def get_sap_array(previous_state):
 
 
 def create_unit_nn_input(state, previous_state):
+    r = Global.UNIT_SAP_RANGE * 2 + 1
+    sap_kernel = np.ones((r, r), dtype=np.int32)
 
-    gf = np.zeros((16, 3, 3), dtype=np.float32)
+    gf = np.zeros((17, 3, 3), dtype=np.float32)
 
     if (
         Global.OBSTACLE_MOVEMENT_PERIOD_FOUND
@@ -225,8 +227,9 @@ def create_unit_nn_input(state, previous_state):
     gf[13] = state.opp_fleet.reward / 1000
     gf[14] = sum(Global.RELIC_RESULTS) / 3
     gf[15] = min(Global.NEBULA_VISION_REDUCTION_OPTIONS) / 8
+    gf[16] = (Global.ALL_RELICS_FOUND,)
 
-    d = np.zeros((24, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
+    d = np.zeros((32, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
 
     for unit in state.fleet:
         if unit.energy >= 0:
@@ -287,6 +290,60 @@ def create_unit_nn_input(state, previous_state):
 
     d[22] /= 10
     d[23] /= Global.MAX_UNIT_ENERGY
+
+    # 24 - unit wo energy count
+    # 25 - can move
+    # 26 - can sap
+    # 27 - sap count
+    for unit in state.fleet:
+        x, y = unit.coordinates
+        if unit.energy < 0:
+            d[24, y, x] += 1
+        if unit.energy >= Global.UNIT_MOVE_COST:
+            d[25, y, x] += 1
+        if unit.energy >= Global.UNIT_SAP_COST:
+            d[26, y, x] += 1
+            d[27, y, x] += 1
+
+    d[27] = convolve2d(
+        d[27],
+        sap_kernel,
+        mode="same",
+        boundary="fill",
+        fillvalue=0,
+    )
+
+    d[24] /= 10
+    d[25] /= 10
+    d[26] /= 10
+    d[27] /= 10
+
+    # 28 - opp unit wo energy count
+    # 29 - opp can move
+    # 30 - opp can sap
+    # 31 - opp sap count
+    for unit in state.opp_fleet:
+        x, y = unit.coordinates
+        if unit.energy < 0:
+            d[28, y, x] += 1
+        if unit.energy >= Global.UNIT_MOVE_COST:
+            d[29, y, x] += 1
+        if unit.energy >= Global.UNIT_SAP_COST:
+            d[30, y, x] += 1
+            d[31, y, x] += 1
+
+    d[31] = convolve2d(
+        d[31],
+        sap_kernel,
+        mode="same",
+        boundary="fill",
+        fillvalue=0,
+    )
+
+    d[28] /= 10
+    d[29] /= 10
+    d[30] /= 10
+    d[31] /= 10
 
     if state.team_id == 1:
         d = transpose(d, reflective=True).copy()
