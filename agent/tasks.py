@@ -261,6 +261,8 @@ def create_unit_nn_input(state, previous_state):
     for i in [1, 3, 5, 7]:
         d[i] /= Global.MAX_UNIT_ENERGY
 
+    d[8] = get_sap_array(previous_state)
+
     f = state.field
     d[9] = f.vision
     d[10] = f.energy / Global.MAX_UNIT_ENERGY
