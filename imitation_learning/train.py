@@ -16,8 +16,8 @@ EPISODES_DIR = "dataset/episodes"
 AGENT_EPISODES_DIR = "dataset/agent_episodes"
 MODEL_NAME = "unit_unet"
 
-N_CHANNELS = 24
-N_GLOBAL = 16
+N_CHANNELS = 28
+N_GLOBAL = 17
 N_CLASSES = 6
 
 
@@ -34,7 +34,7 @@ def seed_everything(seed_value):
         torch.backends.cudnn.benchmark = True
 
 
-def select_episodes(submission_ids, min_opp_score, val_ratio=0.1, num_episodes=None):
+def select_episodes(submission_ids, min_opp_score, val_ratio=0.05, num_episodes=None):
     seed_everything(42)
 
     submissions_df = pd.read_csv("dataset/submissions.csv")
@@ -78,6 +78,9 @@ def select_episodes(submission_ids, min_opp_score, val_ratio=0.1, num_episodes=N
 class LuxDataset(Dataset):
 
     def __init__(self, episodes, aug=True):
+        if not episodes:
+            raise ValueError("Can't create datasert without episodes")
+
         self.episode_steps = []
         self.episode_id_to_data = {}
         for episode_id, episode_path in enumerate(episodes):
@@ -115,20 +118,22 @@ class LuxDataset(Dataset):
         for i, x in enumerate(gf_values):
             gf[i] = x
 
-        label = np.zeros((6, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
+        label = np.zeros((SPACE_SIZE, SPACE_SIZE), dtype=np.int64)
         for x, y, action_type in actions:
             if x == -1 or y == -1:
                 break
             if aug:
                 action_type = ActionType(action_type).transpose()
-            label[action_type, y, x] = 1
+            label[y, x] = action_type
 
         if aug:
             state = transpose(state)
             label = transpose(label)
             gf[0] *= -1  # nebula_tile_drift_direction
 
-        return state, gf, label
+        mask = state[25] > 0
+
+        return state, gf, label, mask
 
 
 # ===================#
@@ -256,52 +261,32 @@ class UNet(nn.Module):
 # ===================#
 
 
-criterion = nn.BCEWithLogitsLoss()
+def masked_loss(predictions, labels, mask, weights):
+    """
+    predictions: (batch_size, num_classes, height, width)
+    labels: Ground truth labels (batch_size, height, width)
+    mask: Binary mask (batch_size, height, width)
+    """
+    loss = F.cross_entropy(predictions, labels, weight=weights, reduction="none")
+    loss = loss * mask
+    loss = loss.sum(dim=[1, 2]) / mask.sum(dim=[1, 2])
+    return loss.mean()
 
 
-def get_loss(policy, label):
-    index = []
-    x0 = []
-    y0 = []
-    ans = []
-    for i, lb in enumerate(label):
-        with_action = lb.any(axis=0)
-        for x, y in zip(*torch.where(with_action)):
-            index.append(i)
-            x0.append(x)
-            y0.append(y)
+def get_acc(outs, actions, mask, label_to_acc):
+    preds = torch.argmax(outs, dim=1)
+    total = torch.sum(mask)
+    correct = torch.sum((preds == actions) * mask)
 
-    def to_cuda(x):
-        return torch.from_numpy(np.array(x)).cuda().long()
+    for action_type in ActionType:
+        action_type = int(action_type)
+        action_mask = (actions == action_type) * mask
 
-    index = to_cuda(index)
-    x0 = torch.tensor(x0)
-    y0 = torch.tensor(y0)
+        action_correct = torch.sum((preds == actions) * action_mask)
+        action_total = torch.sum(action_mask)
 
-    preds = policy[index, :, x0, y0]
-    ans = label[index, :, x0, y0]
-
-    loss = criterion(preds, ans)
-
-    return loss
-
-
-def get_acc(policy, label, label_to_acc):
-    correct = 0
-    total = 0
-    for p, lb in zip(policy, label):
-        with_action = lb.any(axis=0)
-        for x, y in zip(*torch.where(with_action)):
-            _p = p[:, x, y]
-            _lb = lb[:, x, y]
-            _p = torch.argmax(_p)
-            _lb = torch.argmax(_lb)
-
-            correct += _p == _lb
-            total += 1
-
-            label_to_acc[int(_lb)][0] += int(_p == _lb)
-            label_to_acc[int(_lb)][1] += 1
+        label_to_acc[action_type][0] += action_correct
+        label_to_acc[action_type][1] += action_total
 
     return correct, total
 
@@ -312,15 +297,20 @@ def train_model(
     val_episodes,
     optimizer,
     scheduler,
+    weights,
     num_epochs,
     model_name="model",
     num_episodes_per_epoch=1000,
     batch_size=128,
 ):
-    best_acc = 0.0
+
+    best_loss = 10**9
 
     val_loader = DataLoader(
-        LuxDataset(val_episodes), batch_size=batch_size, shuffle=False, num_workers=0
+        LuxDataset(val_episodes, aug=False),
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=0,
     )
 
     for epoch in range(num_epochs):
@@ -339,6 +329,8 @@ def train_model(
         if (epoch + 1) % 5 == 0:
             phases.append(("val", val_loader))
 
+        val_loss = 10**9
+
         for phase, dataloader in phases:
             if phase == "train":
                 model.train()
@@ -347,7 +339,7 @@ def train_model(
 
             epoch_loss = 0.0
             epoch_acc = 0
-            coorect = 0
+            correct = 0
             total = 0
 
             label_to_acc = {x: [0, 0] for x in ActionType}
@@ -355,54 +347,61 @@ def train_model(
             for item in tqdm(dataloader, leave=False):
                 states = item[0].cuda().float()
                 gf = item[1].cuda().float()
-                label = item[2].cuda().float()
+                label = item[2].cuda().long()
+                mask = item[3].cuda().bool()
                 optimizer.zero_grad()
 
                 with torch.set_grad_enabled(phase == "train"):
                     policy = model(states, gf)
-                    loss = get_loss(policy, label)
+                    loss = masked_loss(policy, label, mask, weights)
 
                     if phase == "train":
                         loss.backward()
                         optimizer.step()
                     else:
-                        _coorect, _total = get_acc(policy, label, label_to_acc)
-                        coorect += _coorect
+                        _correct, _total = get_acc(policy, label, mask, label_to_acc)
+                        correct += _correct
                         total += _total
 
                     epoch_loss += loss.item() * len(policy)
 
             data_size = len(dataloader.dataset)
             epoch_loss = epoch_loss / data_size
+
             if phase != "train":
-                epoch_acc = coorect.double() / total
-                print(
-                    "label to auc",
-                    {
-                        ActionType(l): c / t if t else None
-                        for l, (c, t) in label_to_acc.items()
-                    },
-                )
+                val_loss = epoch_loss
+                epoch_acc = correct.double() / total
+
+                msg = []
+                for l, (c, t) in label_to_acc.items():
+                    if t > 0:
+                        msg.append(f"{ActionType(l)}: {float(c / t):.2f}")
+                    else:
+                        msg.append(f"{ActionType(l)}: nan")
+                msg = ", ".join(msg)
+
+                print("label to auc", msg)
+
                 if scheduler is not None:
                     scheduler.step(epoch_loss)
 
-            time.sleep(10)
+            time.sleep(1)
             print(
                 f"Epoch {epoch + 1}/{num_epochs} | {phase:^5} | Loss: {epoch_loss:.5f} | Acc: {epoch_acc:.4f}"
             )
 
-        if epoch_acc > best_acc:
+        if val_loss < best_loss:
             traced = torch.jit.trace(
                 model.cpu(),
                 example_inputs=(
-                    torch.rand(1, N_CHANNELS, SPACE_SIZE, SPACE_SIZE),
+                    torch.rand(1, N_CHANNELS, 24, 24),
                     torch.rand(1, N_GLOBAL, 3, 3),
                 ),
             )
             model_path = f"{model_name}.pth"
             print(f"Saving model to `{model_path}`.")
             traced.save(model_path)
-            best_acc = epoch_acc
+            best_loss = val_loss
 
 
 def main(submission_ids, min_opp_score):
@@ -414,12 +413,17 @@ def main(submission_ids, min_opp_score):
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, "min", factor=0.1, patience=0, min_lr=1e-6, verbose=True
     )
+
+    # center, up, right, down, left, sap
+    weights = torch.Tensor([0.3, 1.0, 0.5, 0.5, 1.0, 1.0]).cuda().float()
+
     train_model(
         model,
         train_episodes,
         val_episodes,
         optimizer,
         scheduler,
+        weights,
         num_epochs=50,
         model_name=MODEL_NAME,
     )
