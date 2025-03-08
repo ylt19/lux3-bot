@@ -202,7 +202,7 @@ def convert_episode(episode_data, team_id):
 
 
 def pars_obs(state, team_actions, sap_kernel):
-    d = np.zeros((32, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
+    d = np.zeros((28, SPACE_SIZE, SPACE_SIZE), dtype=np.float16)
 
     # 0 - unit positions
     # 1 - unit energy
@@ -289,36 +289,9 @@ def pars_obs(state, team_actions, sap_kernel):
     d[26] /= 10
     d[27] /= 10
 
-    # 28 - opp unit wo energy count
-    # 29 - opp can move
-    # 30 - opp can sap
-    # 31 - opp sap count
-    for unit in state.opp_fleet:
-        x, y = unit.coordinates
-        if unit.energy < 0:
-            d[28, y, x] += 1
-        if unit.energy >= Global.UNIT_MOVE_COST:
-            d[29, y, x] += 1
-        if unit.energy >= Global.UNIT_SAP_COST:
-            d[30, y, x] += 1
-            d[31, y, x] += 1
-
-    d[31] = convolve2d(
-        d[31],
-        sap_kernel,
-        mode="same",
-        boundary="fill",
-        fillvalue=0,
-    )
-
-    d[28] /= 10
-    d[29] /= 10
-    d[30] /= 10
-    d[31] /= 10
-
     actions = {}
     for ship, action in zip(state.fleet.ships, team_actions):
-        if ship.node is not None and ship.energy >= 0:
+        if ship.is_visible and ship.can_move():
             action_type, dx, dy = action
             position = ship.coordinates
             if position not in actions:
@@ -799,6 +772,7 @@ def convert_episodes(
             episodes_to_convert,
             saps,
             max_workers=num_workers,
+            chunksize=10,
         )
 
 
