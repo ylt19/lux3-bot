@@ -1,10 +1,12 @@
 import os
+import glob
 import pandas as pd
 from pathlib import Path
 
 WORKING_FOLDER = Path(__file__).parent
 SUBMISSIONS_PATH = f"{WORKING_FOLDER}/submissions.csv"
 GAMES_PATH = f"{WORKING_FOLDER}/games.csv"
+EPISODES_DIR = f"{WORKING_FOLDER}/episodes"
 
 
 def update_data():
@@ -14,6 +16,11 @@ def update_data():
         submission_id_to_name = dict(
             zip(old_submissions_df["submission_id"], old_submissions_df["name"])
         )
+
+    downloaded_episodes = {
+        int(os.path.basename(x).split(".")[0])
+        for x in glob.glob(f"{EPISODES_DIR}/*.json")
+    }
 
     games = pd.read_csv(GAMES_PATH)
     print(f"Num games {len(games)}")
@@ -25,7 +32,12 @@ def update_data():
         first_game = sub_df.iloc[0]
         last_game = sub_df.iloc[-1]
 
-        num_games = len(sub_df)
+        episode_ids = sub_df["EpisodeId"].unique()
+        num_games = len(episode_ids)
+        num_downloaded = sum(
+            episode_id in downloaded_episodes for episode_id in episode_ids
+        )
+
         score = last_game["UpdatedScore"]
         created_date = first_game["CreateTime"]
         updated_date = last_game["CreateTime"]
@@ -36,6 +48,7 @@ def update_data():
                 "name": submission_id_to_name.get(submission_id),
                 "score": score,
                 "num_games": num_games,
+                "num_downloaded": num_downloaded,
                 "created_date": created_date,
                 "updated_date": updated_date,
             }
