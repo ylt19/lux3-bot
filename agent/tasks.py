@@ -229,7 +229,7 @@ def create_unit_nn_input(state, previous_state):
     gf[15] = min(Global.NEBULA_VISION_REDUCTION_OPTIONS) / 8
     gf[16] = (Global.ALL_RELICS_FOUND,)
 
-    d = np.zeros((32, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
+    d = np.zeros((28, SPACE_SIZE, SPACE_SIZE), dtype=np.float32)
 
     for unit in state.fleet:
         if unit.energy >= 0:
@@ -319,33 +319,6 @@ def create_unit_nn_input(state, previous_state):
     d[25] /= 10
     d[26] /= 10
     d[27] /= 10
-
-    # 28 - opp unit wo energy count
-    # 29 - opp can move
-    # 30 - opp can sap
-    # 31 - opp sap count
-    for unit in state.opp_fleet:
-        x, y = unit.coordinates
-        if unit.energy < 0:
-            d[28, y, x] += 1
-        if unit.energy >= Global.UNIT_MOVE_COST:
-            d[29, y, x] += 1
-        if unit.energy >= Global.UNIT_SAP_COST:
-            d[30, y, x] += 1
-            d[31, y, x] += 1
-
-    d[31] = convolve2d(
-        d[31],
-        sap_kernel,
-        mode="same",
-        boundary="fill",
-        fillvalue=0,
-    )
-
-    d[28] /= 10
-    d[29] /= 10
-    d[30] /= 10
-    d[31] /= 10
 
     if state.team_id == 1:
         d = transpose(d, reflective=True).copy()
