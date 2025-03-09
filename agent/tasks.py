@@ -83,7 +83,7 @@ def apply_nn(state, previous_state, unit_model, sap_model):
     policy = p.squeeze(0).numpy()
 
     node_to_ships = defaultdict(list)
-    for ship in state.fleet:
+    for ship in sorted(state.fleet, key=lambda s: -s.energy):
         node_to_ships[ship.node].append(ship)
 
     sap_ships = []
@@ -92,24 +92,48 @@ def apply_nn(state, previous_state, unit_model, sap_model):
             ships = ships[: len(ships) // 2]
 
         for ship in ships:
-
-            if state.team_id == 0:
-                x, y = ship.coordinates
-                label = np.argsort(policy[:, y, x])[::-1]
-                label = int(label[0])
-            else:
-                x, y = get_opposite(*ship.coordinates)
-                label = np.argsort(policy[:, y, x])[::-1]
-                label = int(label[0])
-                label = ActionType(label).transpose(reflective=True).value
-
-            if label == ActionType.sap:
+            if set_action(state, ship, policy) == ActionType.sap:
                 sap_ships.append(ship)
-            else:
-                ship.action_queue = [Action(ActionType(label))]
 
     if sap_ships:
         apply_nn_sap_tasks(state, previous_state, sap_model, sap_ships)
+
+    # policy[ActionType.sap] = -10000
+    # for ship in sap_ships:
+    #     if not ship.action_queue:
+    #         new_action = set_action(state, ship, policy)
+    #         log(
+    #             f"step={state.global_step}: Can't apply sap action for {ship}, "
+    #             f"found a new action {new_action}",
+    #             level=2,
+    #         )
+
+
+def set_action(state, ship, policy):
+    if state.team_id == 0:
+        x, y = ship.coordinates
+        predictions = policy[:, y, x].tolist()
+        action_to_score = dict(zip(ActionType, predictions))
+    else:
+        x, y = get_opposite(*ship.coordinates)
+        predictions = policy[:, y, x].tolist()
+        action_to_score = {}
+        for action, score in zip(ActionType, predictions):
+            action = ActionType(action).transpose(reflective=True).value
+            action_to_score[action] = score
+
+    if not ship.can_sap():
+        action_to_score.pop(ActionType.sap.value)
+
+    best_score = max(action_to_score.values())
+    best_action = [x for x, v in action_to_score.items() if v == best_score][0]
+
+    if best_action == ActionType.sap:
+        pass
+    else:
+        ship.action_queue = [Action(ActionType(best_action))]
+
+    return best_action
 
 
 def apply_nn_sap_tasks(state, previous_state, sap_model, sap_ships):
@@ -150,15 +174,12 @@ def apply_nn_sap_tasks(state, previous_state, sap_model, sap_ships):
             if state.field.sap_mask[sap_y, sap_x] == 0:
                 log(
                     f"Ignore a pointless sap action: {ship} -> {sap_x, sap_y}, step {state.global_step}",
-                    level=2,
+                    level=1,
                 )
-                ship.action_queue = [Action(ActionType.center)]
             else:
                 dx = sap_x - ship.node.x
                 dy = sap_y - ship.node.y
                 ship.action_queue = [Action(ActionType.sap, dx, dy)]
-        else:
-            ship.action_queue = [Action(ActionType.center)]
 
 
 def get_sap_array(previous_state):
