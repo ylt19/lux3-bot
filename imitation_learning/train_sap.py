@@ -16,8 +16,8 @@ EPISODES_DIR = "dataset/episodes"
 AGENT_EPISODES_DIR = "dataset/agent_episodes"
 MODEL_NAME = "sap_unet"
 
-N_CHANNELS = 21
-N_GLOBAL = 16
+N_CHANNELS = 29
+N_GLOBAL = 17
 N_CLASSES = 1
 
 
@@ -53,7 +53,7 @@ def select_episodes(submission_ids, min_opp_score, val_ratio=0.1, num_episodes=N
         if os.path.exists(path):
             episodes.add(path)
 
-    episodes = sorted(episodes, key=lambda x: x[1])
+    episodes = sorted(episodes)
     if num_episodes is not None:
         episodes = episodes[:num_episodes]
 
@@ -308,8 +308,8 @@ def train_model(
         )
 
         phases = [("train", train_dataloader)]
-        # if (epoch + 1) % 5 == 0:
-        phases.append(("val", val_loader))
+        if (epoch + 1) % 5 == 0:
+            phases.append(("val", val_loader))
 
         val_loss = 10**9
 

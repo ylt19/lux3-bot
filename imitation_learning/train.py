@@ -53,7 +53,7 @@ def select_episodes(submission_ids, min_opp_score, val_ratio=0.05, num_episodes=
         if os.path.exists(path):
             episodes.add(path)
 
-    episodes = sorted(episodes, key=lambda x: x[1])
+    episodes = sorted(episodes)
     if num_episodes is not None:
         episodes = episodes[:num_episodes]
 
