@@ -98,15 +98,15 @@ def apply_nn(state, previous_state, unit_model, sap_model):
     if sap_ships:
         apply_nn_sap_tasks(state, previous_state, sap_model, sap_ships)
 
-    # policy[ActionType.sap] = -10000
-    # for ship in sap_ships:
-    #     if not ship.action_queue:
-    #         new_action = set_action(state, ship, policy)
-    #         log(
-    #             f"step={state.global_step}: Can't apply sap action for {ship}, "
-    #             f"found a new action {new_action}",
-    #             level=2,
-    #         )
+    policy[ActionType.sap] = -10000
+    for ship in sap_ships:
+        if not ship.action_queue:
+            new_action = set_action(state, ship, policy)
+            log(
+                f"step={state.global_step}: Can't apply sap action for {ship}, "
+                f"found a new action {new_action}",
+                level=2,
+            )
 
 
 def set_action(state, ship, policy):

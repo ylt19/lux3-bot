@@ -46,6 +46,9 @@ def convert_episode(episode_data, team_id):
     if not any(wins):
         return
 
+    if sum(wins) > Global.NUM_MATCHES_IN_GAME / 2:
+        wins = [1 for _ in wins]
+
     obs_array_list, gf_list, action_list, step_list = [], [], [], []
 
     Global.clear()
