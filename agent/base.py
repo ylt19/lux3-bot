@@ -44,7 +44,6 @@ class Global:
     OBSTACLE_MOVEMENT_DIRECTION_FOUND = False
     UNIT_SAP_DROPOFF_FACTOR_FOUND = False
     UNIT_ENERGY_VOID_FACTOR_FOUND = False
-    ENERGY_NODE_MOVEMENT_PERIOD_FOUND = False
     NEBULA_VISION_REDUCTION_FOUND = False
 
     # Info about completed matches
@@ -72,10 +71,6 @@ class Global:
     # - `None`: It is unknown whether there have been changes or not.
     # This information will be used to determine the speed of obstacle movement.
     OBSTACLES_MOVEMENT_STATUS = []
-
-    # energy_nodes_movement_status: list of {True, False, None}
-    # This information will be used to determine the speed of energy nodes.
-    ENERGY_NODES_MOVEMENT_STATUS = []
 
     # Game Params:
     class DefaultParams:
@@ -113,7 +108,6 @@ class Global:
         cls.OBSTACLE_MOVEMENT_DIRECTION_FOUND = False
         cls.UNIT_SAP_DROPOFF_FACTOR_FOUND = False
         cls.UNIT_ENERGY_VOID_FACTOR_FOUND = False
-        cls.ENERGY_NODE_MOVEMENT_PERIOD_FOUND = False
         cls.NEBULA_VISION_REDUCTION_FOUND = False
 
         cls.NUM_COMPLETED_MATCHES = 0
@@ -124,7 +118,6 @@ class Global:
         cls.REWARD_RESULTS = []
         cls.RELIC_RESULTS = [0 for _ in range(cls.NUM_MATCHES_IN_GAME)]
         cls.OBSTACLES_MOVEMENT_STATUS = []
-        cls.ENERGY_NODES_MOVEMENT_STATUS = []
 
         cls.Params = cls.DefaultParams
 
@@ -278,12 +271,6 @@ def obstacles_moving(step):
     return elements_moving(step, movement_period=Global.OBSTACLE_MOVEMENT_PERIOD)
 
 
-def energy_nodes_moving(step):
-    if not Global.ENERGY_NODE_MOVEMENT_PERIOD_FOUND:
-        return
-    return elements_moving(step, movement_period=Global.ENERGY_NODE_MOVEMENT_PERIOD)
-
-
 def can_relic_appear(global_step) -> bool:
     match_number = get_match_number(global_step)
     if match_number > Global.LAST_MATCH_WHEN_RELIC_CAN_APPEAR:
@@ -299,21 +286,3 @@ def can_relic_appear(global_step) -> bool:
         return False
 
     return True
-
-
-class Task:
-    def __init__(self, target):
-        self.target = target
-        self.ship = None
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}({self.target})"
-
-    def completed(self, state, ship):
-        return False
-
-    def evaluate(self, state, ship):
-        return 0
-
-    def apply(self, state, ship):
-        pass
