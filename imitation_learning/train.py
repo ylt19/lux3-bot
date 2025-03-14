@@ -12,9 +12,8 @@ from torch.utils.data import Dataset, DataLoader
 from agent.base import SPACE_SIZE, transpose
 from agent.path import ActionType
 
-EPISODES_DIR = "dataset/episodes"
-AGENT_EPISODES_DIR = "dataset/agent_episodes"
-MODEL_NAME = "unit_unet"
+AGENT_EPISODES_DIR = "imitation_learning/dataset/agent_episodes"
+MODEL_NAME = "imitation_learning/unit_unet"
 
 N_CHANNELS = 28
 N_GLOBAL = 17
@@ -37,10 +36,10 @@ def seed_everything(seed_value):
 def select_episodes(submission_ids, min_opp_score, val_ratio=0.05, num_episodes=None):
     seed_everything(42)
 
-    submissions_df = pd.read_csv("dataset/submissions.csv")
+    submissions_df = pd.read_csv("imitation_learning/dataset/submissions.csv")
     sid_to_score = dict(zip(submissions_df["submission_id"], submissions_df["score"]))
 
-    games_df = pd.read_csv("dataset/games.csv")
+    games_df = pd.read_csv("imitation_learning/dataset/games.csv")
     games_df["opp_score"] = [sid_to_score[x] for x in games_df["OppSubmissionId"]]
     games_df = games_df[
         games_df["SubmissionId"].isin(submission_ids)

@@ -11,10 +11,8 @@ from torch.utils.data import Dataset, DataLoader
 
 from agent.base import SPACE_SIZE, transpose
 
-
-EPISODES_DIR = "dataset/episodes"
-AGENT_EPISODES_DIR = "dataset/agent_episodes"
-MODEL_NAME = "sap_unet"
+AGENT_EPISODES_DIR = "imitation_learning/dataset/agent_episodes_sap"
+MODEL_NAME = "imitation_learning/sap_unet"
 
 N_CHANNELS = 29
 N_GLOBAL = 17
@@ -37,10 +35,10 @@ def seed_everything(seed_value):
 def select_episodes(submission_ids, min_opp_score, val_ratio=0.1, num_episodes=None):
     seed_everything(42)
 
-    submissions_df = pd.read_csv("dataset/submissions.csv")
+    submissions_df = pd.read_csv("imitation_learning/dataset/submissions.csv")
     sid_to_score = dict(zip(submissions_df["submission_id"], submissions_df["score"]))
 
-    games_df = pd.read_csv("dataset/games.csv")
+    games_df = pd.read_csv("imitation_learning/dataset/games.csv")
     games_df["opp_score"] = [sid_to_score[x] for x in games_df["OppSubmissionId"]]
     games_df = games_df[
         games_df["SubmissionId"].isin(submission_ids)
@@ -98,10 +96,9 @@ class LuxDataset(Dataset):
         return len(self.episode_steps)
 
     def __getitem__(self, idx):
-        sid, episode_id, step = self.episode_steps[idx]
+        episode_id, step = self.episode_steps[idx]
 
-        path = f"{AGENT_EPISODES_DIR}/{sid}_{episode_id}.npz"
-        data = np.load(path)
+        data = self.episode_id_to_data[episode_id]
 
         state = data["states"][step]
         gf_values = data["gfs"][step]
@@ -292,7 +289,10 @@ def train_model(
     best_loss = 10**9
 
     val_loader = DataLoader(
-        LuxDataset(val_episodes), batch_size=batch_size, shuffle=False, num_workers=0
+        LuxDataset(val_episodes, aug=False),
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=0,
     )
 
     for epoch in range(num_epochs):
