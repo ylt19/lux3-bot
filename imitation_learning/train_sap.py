@@ -129,6 +129,8 @@ class LuxDataset(Dataset):
 #       Model        #
 # ===================#
 
+# source https://github.com/milesial/Pytorch-UNet/tree/master/unet
+
 
 class DoubleConv(nn.Module):
     """(convolution => [BN] => ReLU) * 2"""
