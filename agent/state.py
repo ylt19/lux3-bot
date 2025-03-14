@@ -14,7 +14,6 @@ from .base import (
     obstacles_moving,
 )
 from .path import ActionType
-from .grid import Grid
 from .space import Space, NodeType
 from .fleet import Fleet
 from .field import Field
@@ -81,7 +80,6 @@ class State:
 
         self._update_game_params()
 
-        self.grid = Grid(self)
         self.field = Field(self, self.field)
 
     def _update_game_params(self):
@@ -221,29 +219,6 @@ class State:
             if show_path:
                 m += f", {ship.path()}"
             log(m)
-
-    def to_animation(self, file_name=None):
-        from pathfinding.visualization import animate_grid
-
-        if not file_name:
-            file_name = f"step_{self.global_step}.mp4"
-
-        agents = []
-        for ship in self.fleet:
-            agents.append(
-                {"id": ship.unit_id, "start": ship.coordinates, "path": ship.path()}
-            )
-
-        anim = animate_grid(
-            self.grid.energy,
-            agents=agents,
-            reservation_table=self.grid.reservation_table,
-            show_weights=True,
-            size=8,
-        )
-
-        log(f"Save state animation as `{file_name}`")
-        anim.save(file_name)
 
     def get_match_status(self):
         # returns:

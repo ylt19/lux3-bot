@@ -81,14 +81,9 @@ class Global:
     class DefaultParams:
         IL = True
         HIDDEN_NODE_ENERGY = 0
-        MSG_TASK = False
-        MSG_TASK_STARTED = False
-        MSG_TASK_FINISHED = False
 
     class GameOverParams(DefaultParams):
         IL = False
-        if IS_KAGGLE:
-            MSG_TASK = True
 
     Params = DefaultParams
     HIDDEN_NODE_ENERGY = Params.HIDDEN_NODE_ENERGY
